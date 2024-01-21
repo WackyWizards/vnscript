@@ -15,6 +15,7 @@ import {
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { Settings } from './settings';
+import * as keywordData from '../../keywords.json';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
@@ -141,7 +142,6 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
 	connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
 }
 
-
 function validateLabels(text: string, textDocument: TextDocument, diagnostics: Diagnostic[]) {
 	const labelPattern = /\(label\s+([^\s]+)\s*((?:\(.*?\)|\s)*?)(?=\))/gs;
 	let labelMatch: RegExpExecArray | null;
@@ -154,7 +154,7 @@ function validateLabels(text: string, textDocument: TextDocument, diagnostics: D
 		const bgMatches = [...labelContent.matchAll(bgPattern)];
 
 		if (bgMatches.length > 1) {
-			addDiagnostic(diagnostics, textDocument, labelMatch, `There can only be one 'bg' in a label.`);
+			addDiagnostic(diagnostics, textDocument, labelMatch, `There can only be one 'bg' keyword in a label.`);
 		}
 
 		for (const bgMatch of bgMatches) {
@@ -195,12 +195,9 @@ function addDiagnostic(diagnostics: Diagnostic[], textDocument: TextDocument, ma
 	diagnostics.push(diagnostic);
 }
 
-
 connection.onDidChangeWatchedFiles(_change => {
 	connection.console.log('We received a file change event');
 });
-
-import * as keywordData from './keywords.json';
   
 connection.onCompletion(
 	(_textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {

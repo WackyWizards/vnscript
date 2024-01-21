@@ -5,6 +5,6 @@
 	"jump": "The jump keyword declares that after processing the previous keyword jump to the provided label.",
 	"after": "The after keyword in a label indicates what this label will do after it's processed.",
 	"say": "When added to a text, defines which character will be added as the speaking character.",
-	"sound": "Defines a sound to be played when this label is processed.",
-	"bg": "Defines a background image to be displayed when this label is processed. Includes extension."
+	"sound": "Defines a sound asset to be played when this label is processed.",
+	"bg": "Defines a background image asset to be displayed when this label is processed. Includes extension."
 }
