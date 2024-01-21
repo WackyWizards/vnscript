@@ -151,12 +151,12 @@ function validateLabels(text: string, textDocument: TextDocument, diagnostics: D
         const labelContent = labelMatch[2];
 
         if (!labelName) {
-            addDiagnostic(diagnostics, textDocument, labelMatch, `Labels need to feature a name.`);
+            addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, labelMatch, `Labels need to feature a name.`);
         }
 
 		if (!labelContent)
 		{
-			addDiagnostic(diagnostics, textDocument, labelMatch, `Labels need to feature content.`);
+			addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, labelMatch, `Labels need to feature content.`);
 		}
 
         // Check if the label contains (text "")
@@ -164,9 +164,9 @@ function validateLabels(text: string, textDocument: TextDocument, diagnostics: D
         const textMatches = [...labelContent.matchAll(textPattern)];
 
         if (textMatches.length === 0) {
-            addDiagnostic(diagnostics, textDocument, labelMatch, `Label '${labelName}' should include '(text "")' content.`);
+            addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, labelMatch, `Label '${labelName}' should include '(text "")' content.`);
         } else if (textMatches.length > 1) {
-            addDiagnostic(diagnostics, textDocument, labelMatch, `Label '${labelName}' should only include one text keyword.`);
+            addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, labelMatch, `Label '${labelName}' should only include one text keyword.`);
         }
 
         // Check for common background asset issues
@@ -174,7 +174,7 @@ function validateLabels(text: string, textDocument: TextDocument, diagnostics: D
         const bgMatches = [...labelContent.matchAll(bgPattern)];
 
         if (bgMatches.length > 1) {
-            addDiagnostic(diagnostics, textDocument, labelMatch, `There can only be one 'bg' keyword in a label.`);
+            addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, labelMatch, `There can only be one 'bg' keyword in a label.`);
         }
 
         for (const bgMatch of bgMatches) {
@@ -182,7 +182,7 @@ function validateLabels(text: string, textDocument: TextDocument, diagnostics: D
             const index = bgMatch.index;
 
             if (index !== undefined && !bgKeyword.includes('.')) {
-                addDiagnostic(diagnostics, textDocument, bgMatch, `'bg' keyword needs to feature the file extension.`);
+                addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, bgMatch, `'bg' keyword needs to feature the file extension.`);
             }
         }
     }
@@ -202,16 +202,16 @@ function validateStartDialogues(text: string, textDocument: TextDocument, diagno
 
 		// If not, yell about it.
         if (!labelPattern.test(text)) {
-            addDiagnostic(diagnostics, textDocument, startDialogueMatch, `No label found with the name '${startDialogueName}'.`);
+            addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, startDialogueMatch, `No label found with the name '${startDialogueName}'.`);
         }
     }
 
     if (startDialogues.length === 0) {
-        addDiagnostic(diagnostics, textDocument, { index: 0, length: text.length, input: text }, `No 'start-dialogue' specified, the script won't know where to start!`);
+        addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, { index: 0, length: text.length, input: text }, `No 'start-dialogue' specified, the script won't know where to start!`);
     }
 }
 
-function addDiagnostic(diagnostics: Diagnostic[], textDocument: TextDocument, match: RegExpMatchArray | { index: number; length: number; input: string; }, message: string) {
+function addDiagnostic(diagnostics: Diagnostic[], severity: DiagnosticSeverity, textDocument: TextDocument, match: RegExpMatchArray | { index: number; length: number; input: string; }, message: string) {
 	const diagnostic: Diagnostic = {
 		severity: DiagnosticSeverity.Error,
 		range: {
