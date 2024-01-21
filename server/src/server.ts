@@ -143,51 +143,80 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
 }
 
 function validateLabels(text: string, textDocument: TextDocument, diagnostics: Diagnostic[]) {
-	const labelPattern = /\(label\s+([^\s]+)\s*((?:\(.*?\)|\s)*?)(?=\))/gs;
-	let labelMatch: RegExpExecArray | null;
+    const labelPattern = /\(label\s+([^\s)]*)?\s*((?:\(.*?\)|\s)*?)(?=\))/gs;
+    let labelMatch: RegExpExecArray | null;
 
-	while ((labelMatch = labelPattern.exec(text))) {
-		const labelName = labelMatch[1];
-		const labelContent = labelMatch[2];
+    while ((labelMatch = labelPattern.exec(text))) {
+        const labelName = labelMatch[1];
+        const labelContent = labelMatch[2];
 
-		const bgPattern = /\(bg\s+([^\s]+)\)/g;
-		const bgMatches = [...labelContent.matchAll(bgPattern)];
+        if (!labelName) {
+            addDiagnostic(diagnostics, textDocument, labelMatch, `Labels need to feature a name.`);
+        }
 
-		if (bgMatches.length > 1) {
-			addDiagnostic(diagnostics, textDocument, labelMatch, `There can only be one 'bg' keyword in a label.`);
+		if (!labelContent)
+		{
+			addDiagnostic(diagnostics, textDocument, labelMatch, `Labels need to feature content.`);
 		}
 
-		for (const bgMatch of bgMatches) {
-			const bgKeyword = bgMatch[0];
-			const index = bgMatch.index;
+        // Check if the label contains (text "")
+        const textPattern = /\(text\s+"([^"]*)"\s*(?:\w+\s*[^)]*)?\)/g;
+        const textMatches = [...labelContent.matchAll(textPattern)];
 
-			if (index !== undefined && !bgKeyword.includes('.')) {
-				addDiagnostic(diagnostics, textDocument, bgMatch, `'bg' keyword needs to feature the file extension.`);
-			}
-		}
-	}
+        if (textMatches.length === 0) {
+            addDiagnostic(diagnostics, textDocument, labelMatch, `Label '${labelName}' should include '(text "")' content.`);
+        } else if (textMatches.length > 1) {
+            addDiagnostic(diagnostics, textDocument, labelMatch, `Label '${labelName}' should only include one text keyword.`);
+        }
+
+        // Check for common background asset issues
+        const bgPattern = /\(bg\s+([^\s]+)\)/g;
+        const bgMatches = [...labelContent.matchAll(bgPattern)];
+
+        if (bgMatches.length > 1) {
+            addDiagnostic(diagnostics, textDocument, labelMatch, `There can only be one 'bg' keyword in a label.`);
+        }
+
+        for (const bgMatch of bgMatches) {
+            const bgKeyword = bgMatch[0];
+            const index = bgMatch.index;
+
+            if (index !== undefined && !bgKeyword.includes('.')) {
+                addDiagnostic(diagnostics, textDocument, bgMatch, `'bg' keyword needs to feature the file extension.`);
+            }
+        }
+    }
 }
 
 function validateStartDialogues(text: string, textDocument: TextDocument, diagnostics: Diagnostic[]) {
-	const startDialoguePattern = /\(start-dialogue\s+([^\s]+)\)/g;
-	let startDialogueMatch: RegExpExecArray | null;
-	const startDialogues: string[] = [];
+    const startDialoguePattern = /\(start-dialogue\s+([^\s]+)\)/g;
+    let startDialogueMatch: RegExpExecArray | null;
+    const startDialogues: string[] = [];
 
-	while ((startDialogueMatch = startDialoguePattern.exec(text))) {
-		startDialogues.push(startDialogueMatch[1]);
-	}
+    while ((startDialogueMatch = startDialoguePattern.exec(text))) {
+        const startDialogueName = startDialogueMatch[1];
+        startDialogues.push(startDialogueName);
 
-	if (startDialogues.length === 0) {
-		addDiagnostic(diagnostics, textDocument, { index: 0, length: text.length, input: text, 0: '', 1: '', 2: '' }, `No 'start-dialogue' specified, the script won't know where to start!`);
-	}
+        // Check if the label with the same name exists
+        const labelPattern = new RegExp(`\\(label\\s+${startDialogueName}\\s*((?:\\(.*?\\)|\\s)*?)(?=\\))`, 'gs');
+
+		// If not, yell about it.
+        if (!labelPattern.test(text)) {
+            addDiagnostic(diagnostics, textDocument, startDialogueMatch, `No label found with the name '${startDialogueName}'.`);
+        }
+    }
+
+    if (startDialogues.length === 0) {
+        addDiagnostic(diagnostics, textDocument, { index: 0, length: text.length, input: text }, `No 'start-dialogue' specified, the script won't know where to start!`);
+    }
 }
 
-function addDiagnostic(diagnostics: Diagnostic[], textDocument: TextDocument, match: RegExpMatchArray | { index: number; length: number; input: string; 0: string; 1: string; 2: string; }, message: string) {
+function addDiagnostic(diagnostics: Diagnostic[], textDocument: TextDocument, match: RegExpMatchArray | { index: number; length: number; input: string; }, message: string) {
 	const diagnostic: Diagnostic = {
 		severity: DiagnosticSeverity.Error,
 		range: {
 			start: textDocument.positionAt(match.index || 0),
-			end: textDocument.positionAt((match.index || 0) + (match[0]?.length || 0)),
+			end: textDocument.positionAt((match.index || 0) + (match.length || 0)),
 		},
 		message: message,
 		source: 'ex',
