@@ -2,9 +2,13 @@
 	"label": "Labels define different sections in your script.",
 	"text": "The text keyword is used to display dialogues.",
 	"choice": "The choice keyword allows users to make choices in the script.",
-	"jump": "The jump keyword declares that after processing the previous keyword jump to the provided label.",
-	"after": "The after keyword in a label indicates what this label will do after it's processed.",
+	"jump": "The jump keyword declares that after executing the previous keyword proceed to the provided label.",
+	"after": "The after keyword in a label specifies the action to be taken after the execution of the label.",
 	"say": "When added to a text, defines which character will be added as the speaking character.",
 	"sound": "Defines a sound asset to be played when this label is processed.",
-	"bg": "Defines a background image asset to be displayed when this label is processed. Includes extension."
+	"bg": "Defines a background image asset to be displayed when this label is processed. Includes extension.",
+	"character": "Defines a character to be shown during this label.",
+	"exp": "When added to a character definition, defines which expression that character will display.",
+	"start-dialogue": "Defines which label will be processed first when this script is loaded.",
+	"end-dialogue": "After this label is executed, conclude the script."
 }

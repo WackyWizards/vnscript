@@ -14,7 +14,7 @@
     ],
     "repository": {
       "keywords": {
-        "match": "\\b(label|text|say|choice|jump|bg|sound|after|start-dialogue|end-dialogue)\\b",
+        "match": "\\b(label|text|say|choice|jump|character|exp|bg|sound|after|start-dialogue|end-dialogue)\\b",
         "name": "keyword.control.vnscript"
       },
       "strings": {
