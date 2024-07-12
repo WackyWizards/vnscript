@@ -8,11 +8,7 @@ export class HoverProvider implements vscode.HoverProvider {
     this.keywordDescriptions = keywordData;
   }
 
-  provideHover(
-    document: vscode.TextDocument,
-    position: vscode.Position,
-    token: vscode.CancellationToken
-  ): vscode.ProviderResult<vscode.Hover> {
+  provideHover(document: vscode.TextDocument,position: vscode.Position,token: vscode.CancellationToken): vscode.ProviderResult<vscode.Hover> {
     const hoveredText = document.getText(document.getWordRangeAtPosition(position));
     const hoverText = this.keywordDescriptions[hoveredText];
   
