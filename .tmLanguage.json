@@ -2,31 +2,57 @@
     "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
     "name": "VNScript",
     "patterns": [
-      {
-        "include": "#keywords"
-      },
-      {
-        "include": "#strings"
-      },
-      {
-        "include": "#numbers"
-      }
+        {
+            "include": "#keywords"
+        },
+        {
+            "include": "#strings"
+        },
+        {
+            "include": "#numbers"
+        },
+        {
+            "include": "#operators"
+        }
     ],
     "repository": {
-      "keywords": {
-        "match": "\\b(label|text|say|choice|jump|character|exp|bg|sound|after|start-dialogue|end-dialogue)\\b",
-        "name": "keyword.control.vnscript"
-      },
-      "strings": {
-        "begin": "\"",
-        "end": "\"",
-        "name": "string.quoted.double.vnscript"
-      },
-      "numbers": {
-        "match": "\\b\\d+\\b",
-        "name": "constant.numeric.vnscript"
-      }
+        "keywords": {
+            "patterns": [
+                {
+                    "match": "\\b(label|text|say|choice|jump|true|false|character|exp|cond|set|cmp|defun|if|bg|sqrt|pow|body|sound|after|start-dialogue|end-dialogue)\\b",
+                    "name": "keyword.control.vnscript"
+                }
+            ]
+        },
+        "strings": {
+            "begin": "\"",
+            "end": "\"",
+            "name": "string.quoted.double.vnscript",
+            "patterns": [
+                {
+                    "name": "constant.character.escape.vnscript",
+                    "match": "\\\\."
+                }
+            ]
+        },
+        "numbers": {
+            "match": "\\b\\d+\\b",
+            "name": "constant.numeric.vnscript"
+        },
+        "operators": {
+            "patterns": [
+                {
+                    "match": "\\+",
+                    "name": "keyword.operator.arithmetic.vnscript.plus"
+                },
+                {
+                    "match": "-",
+                    "name": "keyword.operator.arithmetic.vnscript.minus"
+                }
+            ]
+        }
     },
     "scopeName": "source.vnscript",
     "uuid": "45ed6307-ee60-4453-ab94-1a88c7eef326"
-}  
+  }
+  
