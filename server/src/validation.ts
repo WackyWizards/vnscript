@@ -58,6 +58,12 @@ export function validateStartDialogue(content: string, start: number, end: numbe
     if (!labelPattern.test(textDocument.getText())) {
         addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, { index: start, length: end - start, input: content }, `No label found with the name '${dialogueName}'.`);
     }
+
+    const startDialoguePattern = /\(start-dialogue\s+[^\s)]+\s*\)/g;
+    const startDialogueMatches = textDocument.getText().match(startDialoguePattern);
+    if (startDialogueMatches && startDialogueMatches.length > 1) {
+        addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, { index: start, length: end - start, input: content }, `Only one 'start-dialogue' is allowed per script.`);
+    }
 }
 
 export function validateVariables(content: string, start: number, end: number, textDocument: TextDocument, diagnostics: Diagnostic[]) {
