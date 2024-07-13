@@ -31,10 +31,6 @@ export function validateLabel(content: string, start: number, end: number, textD
         return;
     }
 
-    if (labelContent.includes('(label ')) {
-        addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, { index: start, length: end - start, input: content }, `Why?`);
-    }
-
     if (!labelContent.includes('(text ')) {
         addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, { index: start, length: end - start, input: content }, `Label should include '(text "")' content.`);
     }
