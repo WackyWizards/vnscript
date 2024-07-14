@@ -3,6 +3,9 @@
     "name": "VNScript",
     "patterns": [
         {
+            "include": "#comments"
+        },
+        {
             "include": "#keywords"
         },
         {
@@ -16,6 +19,47 @@
         }
     ],
     "repository": {
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.line.double-slash.vnscript",
+                    "begin": "//",
+                    "beginCaptures": {
+                        "0": {
+                            "name": "punctuation.definition.comment.vnscript"
+                        }
+                    },
+                    "end": "$",
+                    "patterns": [
+                        {
+                            "match": ".+",
+                            "name": "comment.content.vnscript"
+                        }
+                    ]
+                },
+                {
+                    "name": "comment.block.vnscript",
+                    "begin": "/\\*",
+                    "beginCaptures": {
+                        "0": {
+                            "name": "punctuation.definition.comment.begin.vnscript"
+                        }
+                    },
+                    "end": "\\*/",
+                    "endCaptures": {
+                        "0": {
+                            "name": "punctuation.definition.comment.end.vnscript"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "match": ".+?",
+                            "name": "comment.content.vnscript"
+                        }
+                    ]
+                }
+            ]
+        },
         "keywords": {
             "patterns": [
                 {
@@ -54,5 +98,4 @@
     },
     "scopeName": "source.vnscript",
     "uuid": "45ed6307-ee60-4453-ab94-1a88c7eef326"
-  }
-  
+}
