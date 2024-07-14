@@ -1,3 +1,8 @@
+src/
+out/
+esbuild.json
+tsconfig.json
+node_modules
 .vscode/
 .vscode/**
 **/*.ts
