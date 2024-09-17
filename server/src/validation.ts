@@ -46,6 +46,12 @@ export function validateLabel(content: string, start: number, end: number, textD
             addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, { index: start + bgMatchIndex, length: bgMatch[0].length, input: content }, `'bg' keyword needs to feature the file extension.`);
         }
     }
+
+    const hasInput = labelContent.includes('(input');
+    const hasChoice = labelContent.includes('(choice');
+    if (hasInput && hasChoice) {
+        addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, { index: start, length: end - start, input: content }, `Label cannot include both input and choices.`);
+    }
 }
 
 export function validateStartDialogue(content: string, start: number, end: number, textDocument: TextDocument, diagnostics: Diagnostic[]) {
