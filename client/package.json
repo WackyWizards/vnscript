@@ -3,7 +3,7 @@
 	"description": "VSCode part of the VNScript language server",
 	"author": "kEllie",
 	"license": "MIT",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"publisher": "kEllie",
 	"repository": {
 		"type": "git",

@@ -1,7 +1,7 @@
 {
 	"name": "vnscript-server",
 	"description": "Node.js VNScript language server.",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"author": "kEllie",
 	"license": "MIT",
 	"engines": {
