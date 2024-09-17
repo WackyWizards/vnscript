@@ -7,6 +7,7 @@
 	"say": "When added to a text, defines which character will be added as the speaking character.",
 	"sound": "Defines a sound asset to be played when this label is processed.",
 	"bg": "Defines a background image asset to be displayed when this label is processed. Includes extension.",
+	"input": "Defines an input prompt to be displayed when this label is processed.",
 	"character": "Defines a character to be shown during this label.",
 	"exp": "When added to a character definition, defines which expression that character will display.",
 	"cond": "Represents a condition. The keyword will only be processed if the condition allows.",
