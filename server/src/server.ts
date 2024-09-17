@@ -15,6 +15,7 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { Settings } from './settings';
 import { parseText } from './parsing';
+import { tryUpdateKeywords } from './keywords';
 import * as keywordData from '../../keywords.json';
 
 const connection = createConnection(ProposedFeatures.all);
@@ -77,6 +78,7 @@ connection.onInitialized(() => {
 	}
 
 	console.info("VNScript LSP Server Initialized!");
+	tryUpdateKeywords();
 });
 
 // The global settings, used when the `workspace/configuration` request is not supported by the client.
@@ -140,7 +142,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
 connection.onDidChangeWatchedFiles(_change => {
 	connection.console.log('We received a file change event');
 });
-  
+
 connection.onCompletion(
 	(_textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {
 		const completionItems: CompletionItem[] = [];
@@ -151,14 +153,14 @@ connection.onCompletion(
 				kind: CompletionItemKind.Text,
 				detail: value,
 			};
-  
+
 			completionItems.push(completionItem);
 		}		
-  
+
 		return completionItems;
 	}
 );
-  
+
 // Resolves additional information for the item selected in
 // the completion list.
 connection.onCompletionResolve(

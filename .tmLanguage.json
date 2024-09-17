@@ -1,101 +1,101 @@
 {
-    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-    "name": "VNScript",
-    "patterns": [
-        {
-            "include": "#comments"
-        },
-        {
-            "include": "#keywords"
-        },
-        {
-            "include": "#strings"
-        },
-        {
-            "include": "#numbers"
-        },
-        {
-            "include": "#operators"
-        }
-    ],
-    "repository": {
-        "comments": {
-            "patterns": [
-                {
-                    "name": "comment.line.double-slash.vnscript",
-                    "begin": "//",
-                    "beginCaptures": {
-                        "0": {
-                            "name": "punctuation.definition.comment.vnscript"
-                        }
-                    },
-                    "end": "$",
-                    "patterns": [
-                        {
-                            "match": ".+",
-                            "name": "comment.content.vnscript"
-                        }
-                    ]
-                },
-                {
-                    "name": "comment.block.vnscript",
-                    "begin": "/\\*",
-                    "beginCaptures": {
-                        "0": {
-                            "name": "punctuation.definition.comment.begin.vnscript"
-                        }
-                    },
-                    "end": "\\*/",
-                    "endCaptures": {
-                        "0": {
-                            "name": "punctuation.definition.comment.end.vnscript"
-                        }
-                    },
-                    "patterns": [
-                        {
-                            "match": ".+?",
-                            "name": "comment.content.vnscript"
-                        }
-                    ]
-                }
-            ]
-        },
-        "keywords": {
-            "patterns": [
-                {
-                    "match": "\\b(label|text|say|choice|jump|true|false|character|exp|cond|set|cmp|defun|if|bg|sqrt|pow|body|sound|after|start-dialogue|end-dialogue)\\b",
-                    "name": "keyword.control.vnscript"
-                }
-            ]
-        },
-        "strings": {
-            "begin": "\"",
-            "end": "\"",
-            "name": "string.quoted.double.vnscript",
-            "patterns": [
-                {
-                    "name": "constant.character.escape.vnscript",
-                    "match": "\\\\."
-                }
-            ]
-        },
-        "numbers": {
-            "match": "\\b\\d+\\b",
-            "name": "constant.numeric.vnscript"
-        },
-        "operators": {
-            "patterns": [
-                {
-                    "match": "\\+",
-                    "name": "keyword.operator.arithmetic.vnscript.plus"
-                },
-                {
-                    "match": "-",
-                    "name": "keyword.operator.arithmetic.vnscript.minus"
-                }
-            ]
-        }
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "VNScript",
+  "patterns": [
+    {
+      "include": "#comments"
     },
-    "scopeName": "source.vnscript",
-    "uuid": "45ed6307-ee60-4453-ab94-1a88c7eef326"
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#operators"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.vnscript",
+          "begin": "//",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.vnscript"
+            }
+          },
+          "end": "$",
+          "patterns": [
+            {
+              "match": ".+",
+              "name": "comment.content.vnscript"
+            }
+          ]
+        },
+        {
+          "name": "comment.block.vnscript",
+          "begin": "/\\*",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.begin.vnscript"
+            }
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.end.vnscript"
+            }
+          },
+          "patterns": [
+            {
+              "match": ".+?",
+              "name": "comment.content.vnscript"
+            }
+          ]
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "match": "\\b(label|text|choice|jump|after|say|sound|bg|input|character|exp|cond|cmp|set|defun|pow|sqrt|body|start-dialogue|end-dialogue|true|false)\\b",
+          "name": "keyword.control.vnscript"
+        }
+      ]
+    },
+    "strings": {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.vnscript",
+      "patterns": [
+        {
+          "name": "constant.character.escape.vnscript",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "numbers": {
+      "match": "\\b\\d+\\b",
+      "name": "constant.numeric.vnscript"
+    },
+    "operators": {
+      "patterns": [
+        {
+          "match": "\\+",
+          "name": "keyword.operator.arithmetic.vnscript.plus"
+        },
+        {
+          "match": "-",
+          "name": "keyword.operator.arithmetic.vnscript.minus"
+        }
+      ]
+    }
+  },
+  "scopeName": "source.vnscript",
+  "uuid": "45ed6307-ee60-4453-ab94-1a88c7eef326"
 }
