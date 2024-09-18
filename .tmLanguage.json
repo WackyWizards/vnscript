@@ -63,7 +63,7 @@
     "keywords": {
       "patterns": [
         {
-          "match": "\\b(label|text|choice|jump|after|say|sound|bg|input|character|exp|cond|cmp|set|defun|pow|sqrt|body|start-dialogue|end-dialogue|true|false)\\b",
+          "match": "\\b(label|text|choice|jump|after|say|sound|bg|input|character|exp|cond|cmp|set|defun|pow|sqrt|body|load-script|start-dialogue|end-dialogue|true|false)\\b",
           "name": "keyword.control.vnscript"
         }
       ]

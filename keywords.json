@@ -17,6 +17,7 @@
 	"pow": "Returns the first value to the power of the second value.",
 	"sqrt": "Returns the square root of an environment number value.",
 	"body": "Defines the body of an expression.",
+	"load-script": "Loads a script from a file.",
 	"start-dialogue": "Defines which label will be processed first when this script is loaded.",
 	"end-dialogue": "After this label is executed, conclude the script.",
 	"true": "Represents a boolean value (true / false)",
