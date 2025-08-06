@@ -10,7 +10,7 @@
 	"music": "Plays the specified sound event.",
 	"bg": "Defines a background image asset to be displayed when this label is processed. Includes extension.",
 	"input": "Defines an input prompt to be displayed when this label is processed.",
-	"character": "Defines a character to be shown during this label.",
+	"char": "Defines a character to be shown during this label.",
 	"exp": "When added to a character definition, defines which expression that character will display.",
 	"cond": "Represents a condition. The keyword will only be processed if the condition allows.",
 	"set": "Sets an environment variable as the second value.",
@@ -18,9 +18,9 @@
 	"pow": "Returns the first value to the power of the second value.",
 	"sqrt": "Returns the square root of an environment number value.",
 	"body": "Defines the body of an expression.",
-	"load-script": "Loads a script from a file.",
-	"start-dialogue": "Defines which label will be processed first when this script is loaded.",
-	"end-dialogue": "After this label is executed, conclude the script.",
+	"load": "Loads a script from a file.",
+	"start": "Defines which label will be processed first when this script is loaded.",
+	"end": "After this label is executed, conclude the script.",
 	"true": "Represents a boolean value (true / false)",
 	"false": "Represents a boolean value (true / false)"
 }
