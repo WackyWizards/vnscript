@@ -61,7 +61,7 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/kEllieGit/vnscript.git"
+		"url": "https://github.com/KUO-Team/vnscript.git"
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
