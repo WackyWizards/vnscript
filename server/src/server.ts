@@ -77,7 +77,7 @@ connection.onInitialized(() => {
 		});
 	}
 
-	console.info("VNScript LSP Server Initialized!");
+	console.info('VNScript LSP Server Initialized!');
 	tryUpdateKeywords();
 });
 
