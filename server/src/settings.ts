@@ -1,3 +1,3 @@
 export interface Settings {
-	maxNumberOfProblems: number;
+  maxNumberOfProblems: number;
 }
