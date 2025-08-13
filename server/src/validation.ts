@@ -1,90 +1,373 @@
-import {
-	Diagnostic,
-	DiagnosticSeverity,
-} from 'vscode-languageserver/node';
-
+import { Diagnostic, DiagnosticSeverity } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import * as keywords from '../../keywords.json';
 
-export function validateContent(content: string, start: number, end: number, textDocument: TextDocument, diagnostics: Diagnostic[]) {
-    if (content.startsWith('label')) 
-	{
-        validateLabel(content, start, end, textDocument, diagnostics);
-    } 
-	else if (content.startsWith('start-dialogue')) 
-	{
-        validateStartDialogue(content, start, end, textDocument, diagnostics);
-    }
-    else if (content.startsWith('set'))
-    {
-        validateVariables(content, start, end, textDocument, diagnostics);
-    }
-	else 
-	{
-        addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, { index: start, length: end - start, input: content }, `Unexpected content.`);
-    }
+const allowedKeywords = new Set(Object.keys(keywords));
+const allowedOperators = new Set(['=', '+', '-', '*', '/', '%']);
+
+interface ParsedKeyword {
+  keyword: string;
+  args: string[];
 }
 
-export function validateLabel(content: string, start: number, end: number, textDocument: TextDocument, diagnostics: Diagnostic[]) {
-    const labelContent = content.slice(6).trim();
-    if (!labelContent) {
-        addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, { index: start, length: end - start, input: content }, `Empty label.`);
-        return;
-    }
+type Validator = (
+  keyword: ParsedKeyword,
+  start: number,
+  end: number,
+  textDocument: TextDocument,
+  diagnostics: Diagnostic[],
+  labels: string[]
+) => void;
 
-    if (!labelContent.includes('(text ')) {
-        addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, { index: start, length: end - start, input: content }, `Label should include '(text "")' content.`);
-    }
+interface KeywordSpec {
+  minArgs: number;
+  maxArgs?: number;
+  validator?: Validator;
+}
 
-    const bgMatches = [...labelContent.matchAll(/\(bg\s+([^\s]+)\)/g)];
-    if (bgMatches.length > 1) {
-        addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, { index: start, length: end - start, input: content }, `There can only be one 'bg' keyword in a label.`);
-    }
+// ---- Keyword Spec ----
+const KEYWORDS: Record<string, KeywordSpec> = {
+  label: { minArgs: 1, validator: validateLabel },
+  text: { minArgs: 1, maxArgs: 3, validator: validateText },
+  choice: { minArgs: 1 },
+  say: { minArgs: 1, maxArgs: 1 },
+  sound: { minArgs: 1, maxArgs: 1 },
+  bg: { minArgs: 1, maxArgs: 1 },
+  char: { minArgs: 1, maxArgs: 3 },
+  after: { minArgs: 1, validator: validateAfter },
+  jump: { minArgs: 1, maxArgs: 1, validator: validateJump },
+  start: { minArgs: 1, maxArgs: 1, validator: validateStart },
+  set: { minArgs: 2, validator: validateSet },
+  end: { minArgs: 0, maxArgs: 0 },
+  exp: { minArgs: 1, maxArgs: 1 },
+};
 
-    for (const bgMatch of bgMatches) {
-        const bgMatchIndex = bgMatch.index ?? 0;
-        if (!bgMatch[1].includes('.')) {
-            addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, { index: start + bgMatchIndex, length: bgMatch[0].length, input: content }, `'bg' keyword needs to feature the file extension.`);
+// Utility to push diagnostics
+export function addDiagnostic(
+  diagnostics: Diagnostic[],
+  severity: DiagnosticSeverity,
+  document: TextDocument,
+  start: number,
+  end: number,
+  message: string
+) {
+  diagnostics.push({
+    severity,
+    range: { start: document.positionAt(start), end: document.positionAt(end) },
+    message,
+    source: 'vnscript',
+  });
+}
+
+// Tokenize
+function parseKeyword(content: string): ParsedKeyword | null {
+  const parts = content.match(/"[^"]*"|\S+/g)?.map((p) => p.trim()) || [];
+  return parts.length ? { keyword: parts[0], args: parts.slice(1) } : null;
+}
+
+// ---- Validators ----
+function validateJump(
+  k: ParsedKeyword,
+  s: number,
+  e: number,
+  doc: TextDocument,
+  diags: Diagnostic[],
+  labels: string[]
+) {
+  if (k.args[0] !== 'end' && !labels.includes(k.args[0])) {
+    addDiagnostic(
+      diags,
+      DiagnosticSeverity.Error,
+      doc,
+      s,
+      e,
+      `Jump references undefined label '${k.args[0]}'`
+    );
+  }
+}
+
+function validateStart(
+  k: ParsedKeyword,
+  s: number,
+  e: number,
+  doc: TextDocument,
+  diags: Diagnostic[],
+  labels: string[]
+) {
+  if (!labels.includes(k.args[0])) {
+    addDiagnostic(
+      diags,
+      DiagnosticSeverity.Error,
+      doc,
+      s,
+      e,
+      `Start references undefined label '${k.args[0]}'`
+    );
+  }
+}
+
+function validateSet(
+  k: ParsedKeyword,
+  s: number,
+  e: number,
+  doc: TextDocument,
+  diags: Diagnostic[]
+) {
+  if (!/^[a-zA-Z_][\w-]*$/.test(k.args[0])) {
+    addDiagnostic(
+      diags,
+      DiagnosticSeverity.Error,
+      doc,
+      s,
+      e,
+      `Invalid variable name '${k.args[0]}'`
+    );
+  }
+}
+
+function validateText(
+  k: ParsedKeyword,
+  s: number,
+  e: number,
+  doc: TextDocument,
+  diags: Diagnostic[]
+) {
+  const [textArg, sayKeyword, speaker] = k.args;
+  if (!/^".*"$/.test(textArg || '')) {
+    return addDiagnostic(
+      diags,
+      DiagnosticSeverity.Error,
+      doc,
+      s,
+      e,
+      'Dialogue must be enclosed in double quotes'
+    );
+  }
+  if (textArg.slice(1, -1).trim() === '') {
+    addDiagnostic(
+      diags,
+      DiagnosticSeverity.Warning,
+      doc,
+      s,
+      e,
+      'Empty dialogue'
+    );
+  }
+  if (k.args.length === 3 && sayKeyword !== 'say') {
+    addDiagnostic(
+      diags,
+      DiagnosticSeverity.Error,
+      doc,
+      s,
+      e,
+      'Text with 3 args should use: (text "dialogue" say Speaker)'
+    );
+  }
+  if (k.args.length === 3 && !speaker?.trim()) {
+    addDiagnostic(
+      diags,
+      DiagnosticSeverity.Error,
+      doc,
+      s,
+      e,
+      'Speaker name is required when using "say"'
+    );
+  }
+}
+
+function validateLabel(
+  k: ParsedKeyword,
+  s: number,
+  e: number,
+  doc: TextDocument,
+  diags: Diagnostic[],
+  labels: string[]
+) {
+  const name = k.args[0];
+  if (labels.filter((l) => l === name).length > 1) {
+    addDiagnostic(
+      diags,
+      DiagnosticSeverity.Error,
+      doc,
+      s,
+      e,
+      `Duplicate label '${name}'`
+    );
+  }
+  if (!/^[a-zA-Z][\w-]*$/.test(name)) {
+    addDiagnostic(
+      diags,
+      DiagnosticSeverity.Warning,
+      doc,
+      s,
+      e,
+      'Invalid label name'
+    );
+  }
+}
+
+/**
+ * Extract all label names.
+ * @param text Text to extract labels from.
+ * @returns Array of label names.
+ */
+export function extractLabels(text: string): string[] {
+  return [...text.matchAll(/\(label\s+([^\s)]+)/g)].map((m) => m[1]);
+}
+
+function validateAfter(
+  k: ParsedKeyword,
+  s: number,
+  e: number,
+  doc: TextDocument,
+  diags: Diagnostic[]
+) {
+  const valid = ['load', 'jump', 'end', '(set'];
+  if (!valid.includes(k.args[0])) {
+    addDiagnostic(
+      diags,
+      DiagnosticSeverity.Error,
+      doc,
+      s,
+      e,
+      `Unknown after action '${k.args[0]}'`
+    );
+  }
+}
+
+export function validateScript(
+  text: string,
+  document: TextDocument,
+  diagnostics: Diagnostic[]
+) {
+  // Balanced parentheses check (moved from parsing.ts)
+  const open = (text.match(/\(/g) || []).length;
+  const close = (text.match(/\)/g) || []).length;
+  if (open !== close) {
+    addDiagnostic(
+      diagnostics,
+      DiagnosticSeverity.Error,
+      document,
+      0,
+      1,
+      `Mismatched parentheses: ${open} opening, ${close} closing`
+    );
+  }
+
+  // Extract labels
+  const labels = extractLabels(text);
+
+  // Validate structure recursively
+  parseAndValidate(text, 0, document, diagnostics, labels);
+
+  // Extra start keyword rules (moved from parsing.ts)
+  const starts = [...text.matchAll(/\(start\s+/g)];
+  if (starts.length === 0) {
+    addDiagnostic(
+      diagnostics,
+      DiagnosticSeverity.Error,
+      document,
+      0,
+      1,
+      'Script must contain a start'
+    );
+  } else if (starts.length > 1) {
+    addDiagnostic(
+      diagnostics,
+      DiagnosticSeverity.Error,
+      document,
+      starts[1].index!,
+      starts[1].index! + 10,
+      'Multiple start keywords found'
+    );
+  }
+
+  // Extra text quoting check (moved from parsing.ts)
+  for (const m of text.matchAll(/\(text\s+([^")]+)/g)) {
+    addDiagnostic(
+      diagnostics,
+      DiagnosticSeverity.Error,
+      document,
+      m.index!,
+      m.index! + m[0].length,
+      'Text content must be enclosed in double quotes'
+    );
+  }
+}
+
+// Recursive parse + validate
+export function parseAndValidate(
+  text: string,
+  offset: number,
+  document: TextDocument,
+  diagnostics: Diagnostic[],
+  labels: string[]
+) {
+  const stack: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '(') {
+      stack.push(i);
+    } else if (text[i] === ')') {
+      const start = stack.pop();
+      if (start !== undefined) {
+        const absStart = offset + start;
+        const absEnd = offset + i + 1;
+        const content = text.slice(start + 1, i).trim();
+
+        const parsed = parseKeyword(content);
+        if (!parsed) continue;
+
+        // Unknown keyword
+        if (
+          !allowedKeywords.has(parsed.keyword) &&
+          !allowedOperators.has(parsed.keyword)
+        ) {
+          addDiagnostic(
+            diagnostics,
+            DiagnosticSeverity.Error,
+            document,
+            absStart,
+            absEnd,
+            `Unknown keyword '${parsed.keyword}'`
+          );
         }
+
+        // Keyword-specific validation
+        const spec = KEYWORDS[parsed.keyword];
+        if (spec) {
+          if (parsed.args.length < spec.minArgs) {
+            addDiagnostic(
+              diagnostics,
+              DiagnosticSeverity.Error,
+              document,
+              absStart,
+              absEnd,
+              `Too few args for '${parsed.keyword}'`
+            );
+          }
+          if (spec.maxArgs && parsed.args.length > spec.maxArgs) {
+            addDiagnostic(
+              diagnostics,
+              DiagnosticSeverity.Warning,
+              document,
+              absStart,
+              absEnd,
+              `Too many args for '${parsed.keyword}'`
+            );
+          }
+          spec.validator?.(
+            parsed,
+            absStart,
+            absEnd,
+            document,
+            diagnostics,
+            labels
+          );
+        }
+
+        // Recurse into nested content
+        parseAndValidate(content, absStart + 1, document, diagnostics, labels);
+      }
     }
-
-    const hasInput = labelContent.includes('(input');
-    const hasChoice = labelContent.includes('(choice');
-    if (hasInput && hasChoice) {
-        addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, { index: start, length: end - start, input: content }, `Label cannot include both input and choices.`);
-    }
-}
-
-export function validateStartDialogue(content: string, start: number, end: number, textDocument: TextDocument, diagnostics: Diagnostic[]) {
-    const dialogueName = content.slice(14).trim();
-    if (!dialogueName) {
-        addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, { index: start, length: end - start, input: content }, `Start-dialogue needs to point to a label.`);
-    }
-
-    const labelPattern = new RegExp(`\\(label\\s+${dialogueName}\\s`, 'g');
-    if (!labelPattern.test(textDocument.getText())) {
-        addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, { index: start, length: end - start, input: content }, `No label found with the name '${dialogueName}'.`);
-    }
-
-    const startDialoguePattern = /\(start-dialogue\s+[^\s)]+\s*\)/g;
-    const startDialogueMatches = textDocument.getText().match(startDialoguePattern);
-    if (startDialogueMatches && startDialogueMatches.length > 1) {
-        addDiagnostic(diagnostics, DiagnosticSeverity.Error, textDocument, { index: start, length: end - start, input: content }, `Only one 'start-dialogue' is allowed per script.`);
-    }
-}
-
-export function validateVariables(content: string, start: number, end: number, textDocument: TextDocument, diagnostics: Diagnostic[]) {
-    // @TODO: Add variable validation.
-}
-
-export function addDiagnostic(diagnostics: Diagnostic[], severity: DiagnosticSeverity, textDocument: TextDocument, match: { index: number; length: number; input: string }, message: string) {
-    const diagnostic: Diagnostic = {
-        severity: severity,
-        range: {
-            start: textDocument.positionAt(match.index),
-            end: textDocument.positionAt(match.index + match.length),
-        },
-        message: message,
-        source: 'ex',
-    };
-    diagnostics.push(diagnostic);
+  }
 }
