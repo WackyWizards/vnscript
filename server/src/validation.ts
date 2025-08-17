@@ -51,6 +51,17 @@ export function addDiagnostic(
   end: number,
   message: string
 ) {
+  if (
+    diagnostics.some(
+      (d) =>
+        d.range.start.character === document.positionAt(start).character &&
+        d.range.start.line === document.positionAt(start).line &&
+        d.message === message
+    )
+  ) {
+    return; // prevent duplicates
+  }
+
   diagnostics.push({
     severity,
     range: { start: document.positionAt(start), end: document.positionAt(end) },
