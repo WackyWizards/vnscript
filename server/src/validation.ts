@@ -67,140 +67,140 @@ function parseKeyword(content: string): ParsedKeyword | null {
 
 // ---- Validators ----
 function validateJump(
-  k: ParsedKeyword,
-  s: number,
-  e: number,
-  doc: TextDocument,
-  diags: Diagnostic[],
+  keyword: ParsedKeyword,
+  start: number,
+  end: number,
+  document: TextDocument,
+  diagnostics: Diagnostic[],
   labels: string[]
 ) {
-  if (k.args[0] !== 'end' && !labels.includes(k.args[0])) {
+  if (keyword.args[0] !== 'end' && !labels.includes(keyword.args[0])) {
     addDiagnostic(
-      diags,
+      diagnostics,
       DiagnosticSeverity.Error,
-      doc,
-      s,
-      e,
-      `Jump references undefined label '${k.args[0]}'`
+      document,
+      start,
+      end,
+      `Jump references undefined label '${keyword.args[0]}'`
     );
   }
 }
 
 function validateStart(
-  k: ParsedKeyword,
-  s: number,
-  e: number,
-  doc: TextDocument,
-  diags: Diagnostic[],
+  keyword: ParsedKeyword,
+  start: number,
+  end: number,
+  document: TextDocument,
+  diagnostics: Diagnostic[],
   labels: string[]
 ) {
-  if (!labels.includes(k.args[0])) {
+  if (!labels.includes(keyword.args[0])) {
     addDiagnostic(
-      diags,
+      diagnostics,
       DiagnosticSeverity.Error,
-      doc,
-      s,
-      e,
-      `Start references undefined label '${k.args[0]}'`
+      document,
+      start,
+      end,
+      `Start references undefined label '${keyword.args[0]}'`
     );
   }
 }
 
 function validateSet(
-  k: ParsedKeyword,
-  s: number,
-  e: number,
-  doc: TextDocument,
-  diags: Diagnostic[]
+  keyword: ParsedKeyword,
+  start: number,
+  end: number,
+  document: TextDocument,
+  diagnostics: Diagnostic[]
 ) {
-  if (!/^[a-zA-Z_][\w-]*$/.test(k.args[0])) {
+  if (!/^[a-zA-Z_][\w-]*$/.test(keyword.args[0])) {
     addDiagnostic(
-      diags,
+      diagnostics,
       DiagnosticSeverity.Error,
-      doc,
-      s,
-      e,
-      `Invalid variable name '${k.args[0]}'`
+      document,
+      start,
+      end,
+      `Invalid variable name '${keyword.args[0]}'`
     );
   }
 }
 
 function validateText(
-  k: ParsedKeyword,
-  s: number,
-  e: number,
-  doc: TextDocument,
-  diags: Diagnostic[]
+  keyword: ParsedKeyword,
+  start: number,
+  end: number,
+  document: TextDocument,
+  diagnostics: Diagnostic[]
 ) {
-  const [textArg, sayKeyword, speaker] = k.args;
+  const [textArg, sayKeyword, speaker] = keyword.args;
   if (!/^".*"$/.test(textArg || '')) {
     return addDiagnostic(
-      diags,
+      diagnostics,
       DiagnosticSeverity.Error,
-      doc,
-      s,
-      e,
+      document,
+      start,
+      end,
       'Dialogue must be enclosed in double quotes'
     );
   }
   if (textArg.slice(1, -1).trim() === '') {
     addDiagnostic(
-      diags,
+      diagnostics,
       DiagnosticSeverity.Warning,
-      doc,
-      s,
-      e,
+      document,
+      start,
+      end,
       'Empty dialogue'
     );
   }
-  if (k.args.length === 3 && sayKeyword !== 'say') {
+  if (keyword.args.length === 3 && sayKeyword !== 'say') {
     addDiagnostic(
-      diags,
+      diagnostics,
       DiagnosticSeverity.Error,
-      doc,
-      s,
-      e,
+      document,
+      start,
+      end,
       'Text with 3 args should use: (text "dialogue" say Speaker)'
     );
   }
-  if (k.args.length === 3 && !speaker?.trim()) {
+  if (keyword.args.length === 3 && !speaker?.trim()) {
     addDiagnostic(
-      diags,
+      diagnostics,
       DiagnosticSeverity.Error,
-      doc,
-      s,
-      e,
+      document,
+      start,
+      end,
       'Speaker name is required when using "say"'
     );
   }
 }
 
 function validateLabel(
-  k: ParsedKeyword,
-  s: number,
-  e: number,
-  doc: TextDocument,
-  diags: Diagnostic[],
+  keyword: ParsedKeyword,
+  start: number,
+  end: number,
+  document: TextDocument,
+  diagnostics: Diagnostic[],
   labels: string[]
 ) {
-  const name = k.args[0];
+  const name = keyword.args[0];
   if (labels.filter((l) => l === name).length > 1) {
     addDiagnostic(
-      diags,
+      diagnostics,
       DiagnosticSeverity.Error,
-      doc,
-      s,
-      e,
+      document,
+      start,
+      end,
       `Duplicate label '${name}'`
     );
   }
   if (!/^[a-zA-Z][\w-]*$/.test(name)) {
     addDiagnostic(
-      diags,
+      diagnostics,
       DiagnosticSeverity.Warning,
-      doc,
-      s,
-      e,
+      document,
+      start,
+      end,
       'Invalid label name'
     );
   }
@@ -216,21 +216,21 @@ export function extractLabels(text: string): string[] {
 }
 
 function validateAfter(
-  k: ParsedKeyword,
-  s: number,
-  e: number,
-  doc: TextDocument,
-  diags: Diagnostic[]
+  keyword: ParsedKeyword,
+  start: number,
+  end: number,
+  document: TextDocument,
+  diagnostics: Diagnostic[]
 ) {
   const valid = ['load', 'jump', 'end', '(set'];
-  if (!valid.includes(k.args[0])) {
+  if (!valid.includes(keyword.args[0])) {
     addDiagnostic(
-      diags,
+      diagnostics,
       DiagnosticSeverity.Error,
-      doc,
-      s,
-      e,
-      `Unknown after action '${k.args[0]}'`
+      document,
+      start,
+      end,
+      `Unknown after action '${keyword.args[0]}'`
     );
   }
 }
