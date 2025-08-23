@@ -1,10 +1,10 @@
 {
 	"label": "Labels define different sections in your script.",
-	"text": "The text keyword is used to display dialogues.",
+	"dialogue": "Used to display dialogues.",
 	"choice": "The choice keyword allows users to make choices in the script.",
 	"jump": "The jump keyword declares that after executing the previous keyword proceed to the provided label.",
 	"after": "The after keyword in a label specifies the action to be taken after the execution of the label.",
-	"say": "When added to dialogue text, defines which character will be added as the speaking character.",
+	"speaker": "When added to dialogue, defines which character will be added as the speaking character.",
 	"sound": "Plays the specified sound event.",
 	"mixer": "Specifies the mixer to use as the target mixer for the sound.",
 	"music": "Plays the specified sound event.",

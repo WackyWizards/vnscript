@@ -28,7 +28,7 @@ interface KeywordSpec {
 // ---- Keyword Spec ----
 const KEYWORDS: Record<string, KeywordSpec> = {
   label: { minArgs: 1, validator: validateLabel },
-  text: { minArgs: 1, maxArgs: 3, validator: validateText },
+  dialogue: { minArgs: 1, maxArgs: 3, validator: validateDialogue },
   choice: { minArgs: 1 },
   say: { minArgs: 1, maxArgs: 1 },
   sound: { minArgs: 1, maxArgs: 1 },
@@ -136,14 +136,14 @@ function validateSet(
   }
 }
 
-function validateText(
+function validateDialogue(
   keyword: ParsedKeyword,
   start: number,
   end: number,
   document: TextDocument,
   diagnostics: Diagnostic[]
 ) {
-  const [textArg, sayKeyword, speaker] = keyword.args;
+  const [textArg, speakerKeyword, speaker] = keyword.args;
   if (!/^".*"$/.test(textArg || '')) {
     return addDiagnostic(
       diagnostics,
@@ -164,14 +164,14 @@ function validateText(
       'Empty dialogue'
     );
   }
-  if (keyword.args.length === 3 && sayKeyword !== 'say') {
+  if (keyword.args.length === 3 && speakerKeyword !== 'speaker') {
     addDiagnostic(
       diagnostics,
       DiagnosticSeverity.Error,
       document,
       start,
       end,
-      'Text with 3 args should use: (text "dialogue" say Speaker)'
+      'Dialogue with 3 args should use: (dialogue "dialogue" speaker Character)'
     );
   }
   if (keyword.args.length === 3 && !speaker?.trim()) {
@@ -293,15 +293,15 @@ export function validateScript(
     );
   }
 
-  // Extra text quoting check (moved from parsing.ts)
-  for (const m of text.matchAll(/\(text\s+([^")]+)/g)) {
+  // Extra dialogue quoting check
+  for (const m of text.matchAll(/\(dialogue\s+([^")]+)/g)) {
     addDiagnostic(
       diagnostics,
       DiagnosticSeverity.Error,
       document,
       m.index!,
       m.index! + m[0].length,
-      'Text content must be enclosed in double quotes'
+      'Dialogue must be enclosed in double quotes'
     );
   }
 }
