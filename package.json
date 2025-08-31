@@ -13,7 +13,7 @@
 		"vscode": "^1.75.0"
 	},
 	"activationEvents": [],
-	"main": "./client/out/extension",
+	"main": "./client/out/client",
 	"contributes": {
 		"languages": [
 			{
