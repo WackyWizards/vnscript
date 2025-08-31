@@ -2,9 +2,9 @@
 	"name": "vnscript",
 	"displayName": "VNScript",
 	"description": "Adds syntax highlighting, auto-complete and error checking for VNBase Script files",
-	"author": "KUO-Team",
+	"author": "Wacky Wizards",
 	"version": "1.4.0",
-	"publisher": "KUO-Team",
+	"publisher": "kEllie",
 	"categories": [],
 	"keywords": [
 		"multi-root ready"
