@@ -30,7 +30,7 @@ const KEYWORDS: Record<string, KeywordSpec> = {
   label: { minArgs: 1, validator: validateLabel },
   dialogue: { minArgs: 1, maxArgs: 3, validator: validateDialogue },
   choice: { minArgs: 1 },
-  say: { minArgs: 1, maxArgs: 1 },
+  speaker: { minArgs: 1, maxArgs: 1 },
   sound: { minArgs: 1, maxArgs: 1 },
   bg: { minArgs: 1, maxArgs: 1 },
   char: { minArgs: 1, maxArgs: 3 },
@@ -181,7 +181,7 @@ function validateDialogue(
       document,
       start,
       end,
-      'Speaker name is required when using "say"'
+      'Speaker name is required when using "speaker"'
     );
   }
 }
