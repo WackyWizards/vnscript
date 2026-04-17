@@ -75,7 +75,7 @@ connection.onInitialized(() => {
   }
 
   if (hasWorkspaceFolderCapability) {
-    connection.workspace.onDidChangeWorkspaceFolders((_event) => {
+    connection.workspace.onDidChangeWorkspaceFolders(() => {
       connection.console.log('Workspace folder change event received.');
     });
   }
@@ -84,26 +84,19 @@ connection.onInitialized(() => {
   tryUpdateKeywords();
 });
 
-// The global settings, used when the `workspace/configuration` request is not supported by the client.
-// Please note that this is not the case when using this server with the client provided in this example
-// but could happen with other clients.
 const defaultSettings: Settings = { maxNumberOfProblems: 1000 };
 let globalSettings: Settings = defaultSettings;
 
-// Cache the settings of all open documents
+// Cache per document
 const documentSettings: Map<string, Thenable<Settings>> = new Map();
 
 connection.onDidChangeConfiguration((change) => {
   if (hasConfigurationCapability) {
-    // Reset all cached document settings
     documentSettings.clear();
   } else {
-    globalSettings = <Settings>(
-      (change.settings.languageServerExample || defaultSettings)
-    );
+    globalSettings = (change.settings.vnscript || defaultSettings);
   }
 
-  // Revalidate all open text documents
   documents.all().forEach(validateTextDocument);
 });
 
@@ -116,8 +109,9 @@ function getDocumentSettings(resource: string): Thenable<Settings> {
   if (!result) {
     result = connection.workspace.getConfiguration({
       scopeUri: resource,
-      section: 'vnscript-server',
+      section: 'vnscript',
     });
+
     documentSettings.set(resource, result);
   }
 
@@ -138,11 +132,16 @@ documents.onDidChangeContent((change) => {
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const text = textDocument.getText();
   const diagnostics: Diagnostic[] = [];
+
   parseText(text, textDocument, diagnostics);
-  connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
+
+  connection.sendDiagnostics({
+    uri: textDocument.uri,
+    diagnostics,
+  });
 }
 
-connection.onDidChangeWatchedFiles((_change) => {
+connection.onDidChangeWatchedFiles(() => {
   connection.console.log('We received a file change event');
 });
 
@@ -159,13 +158,11 @@ connection.onCompletion(
     };
 
     for (const [key, value] of Object.entries(keywordData)) {
-      const completionItem: CompletionItem = {
+      completionItems.push({
         label: key,
         kind: kinds[key] || CompletionItemKind.Text,
         detail: value,
-      };
-
-      completionItems.push(completionItem);
+      });
     }
 
     return completionItems;
