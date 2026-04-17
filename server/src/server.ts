@@ -70,7 +70,7 @@ connection.onInitialized(() => {
     // Register for all configuration changes.
     connection.client.register(
       DidChangeConfigurationNotification.type,
-      undefined
+      undefined,
     );
   }
 
@@ -150,10 +150,18 @@ connection.onCompletion(
   (_textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {
     const completionItems: CompletionItem[] = [];
 
+    const kinds: Record<string, CompletionItemKind> = {
+      label: CompletionItemKind.Module,
+      dialogue: CompletionItemKind.Event,
+      set: CompletionItemKind.Variable,
+      defun: CompletionItemKind.Function,
+      operators: CompletionItemKind.Operator,
+    };
+
     for (const [key, value] of Object.entries(keywordData)) {
       const completionItem: CompletionItem = {
         label: key,
-        kind: CompletionItemKind.Text,
+        kind: kinds[key] || CompletionItemKind.Text,
         detail: value,
       };
 
@@ -161,7 +169,7 @@ connection.onCompletion(
     }
 
     return completionItems;
-  }
+  },
 );
 
 // Resolves additional information for the item selected in
