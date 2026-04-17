@@ -86,12 +86,16 @@
     "operators": {
       "patterns": [
         {
-          "match": "\\+",
-          "name": "keyword.operator.arithmetic.vnscript.plus"
+          "match": "!=|>=|<=|>|<|=",
+          "name": "keyword.operator.comparison.vnscript"
         },
         {
-          "match": "-",
-          "name": "keyword.operator.arithmetic.vnscript.minus"
+          "match": "\\+|\\*",
+          "name": "keyword.operator.arithmetic.vnscript"
+        },
+        {
+          "match": "(?<![a-zA-Z])-(?![a-zA-Z])",
+          "name": "keyword.operator.arithmetic.vnscript"
         }
       ]
     }

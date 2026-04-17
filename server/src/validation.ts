@@ -3,7 +3,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import * as keywords from '../../keywords.json';
 
 const allowedKeywords = new Set(Object.keys(keywords));
-const allowedOperators = new Set(['=', '+', '-', '*', '/', '%']);
+const allowedOperators = new Set(['=', '!=', '>', '<', '>=', '<=', '+', '-', '*', '/', '%']);
 
 interface ParsedKeyword {
   keyword: string;
