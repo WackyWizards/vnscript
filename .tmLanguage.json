@@ -76,6 +76,32 @@
         {
           "name": "constant.character.escape.vnscript",
           "match": "\\\\."
+        },
+        {
+          "name": "meta.interpolation.vnscript",
+          "begin": "\\$\\{",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.template-expression.begin.vnscript"
+            }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.template-expression.end.vnscript"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#keywords"
+            },
+            {
+              "include": "#numbers"
+            },
+            {
+              "include": "#operators"
+            }
+          ]
         }
       ]
     },
