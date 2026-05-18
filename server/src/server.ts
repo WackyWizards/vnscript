@@ -16,7 +16,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { Settings } from './settings';
 import { parseText } from './parsing';
 import { tryUpdateKeywords } from './keywords';
-import * as keywordData from '../../keywords.json';
+import { Keywords } from '../../shared/out/keywords';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
@@ -28,38 +28,23 @@ let hasDiagnosticRelatedInformationCapability = false;
 connection.onInitialize((params: InitializeParams) => {
   const capabilities = params.capabilities;
 
-  // Does the client support the `workspace/configuration` request?
-  // If not, we fall back using global settings.
-  hasConfigurationCapability = !!(
-    capabilities.workspace && !!capabilities.workspace.configuration
-  );
+  hasConfigurationCapability = capabilities.workspace?.configuration ?? false;
 
-  hasWorkspaceFolderCapability = !!(
-    capabilities.workspace && !!capabilities.workspace.workspaceFolders
-  );
+  hasWorkspaceFolderCapability =
+    capabilities.workspace?.workspaceFolders ?? false;
 
-  hasDiagnosticRelatedInformationCapability = !!(
-    capabilities.textDocument &&
-    capabilities.textDocument.publishDiagnostics &&
-    capabilities.textDocument.publishDiagnostics.relatedInformation
-  );
+  hasDiagnosticRelatedInformationCapability =
+    capabilities.textDocument?.publishDiagnostics?.relatedInformation ?? false;
 
   const result: InitializeResult = {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Incremental,
-      // Tell the client that this server supports code completion.
-      completionProvider: {
-        resolveProvider: true,
-      },
+      completionProvider: { resolveProvider: true },
     },
   };
 
   if (hasWorkspaceFolderCapability) {
-    result.capabilities.workspace = {
-      workspaceFolders: {
-        supported: true,
-      },
-    };
+    result.capabilities.workspace = { workspaceFolders: { supported: true } };
   }
 
   return result;
@@ -67,7 +52,6 @@ connection.onInitialize((params: InitializeParams) => {
 
 connection.onInitialized(() => {
   if (hasConfigurationCapability) {
-    // Register for all configuration changes.
     connection.client.register(
       DidChangeConfigurationNotification.type,
       undefined,
@@ -117,62 +101,36 @@ function getDocumentSettings(resource: string): Thenable<Settings> {
   return result;
 }
 
-// Only keep settings for open documents
-documents.onDidClose((e) => {
-  documentSettings.delete(e.document.uri);
-});
+documents.onDidClose((e) => documentSettings.delete(e.document.uri));
 
-// The content of a text document has changed. This event is emitted
-// when the text document first opened or when its content has changed.
-documents.onDidChangeContent((change) => {
-  validateTextDocument(change.document);
-});
+documents.onDidChangeContent((change) => validateTextDocument(change.document));
 
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
-  const text = textDocument.getText();
   const diagnostics: Diagnostic[] = [];
-
-  parseText(text, textDocument, diagnostics);
-
-  connection.sendDiagnostics({
-    uri: textDocument.uri,
-    diagnostics,
-  });
+  parseText(textDocument.getText(), textDocument, diagnostics);
+  connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
 }
 
 connection.onDidChangeWatchedFiles(() => {
   connection.console.log('We received a file change event');
 });
 
-connection.onCompletion(
-  (_textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {
-    const completionItems: CompletionItem[] = [];
+const CompletionKinds: Record<string, CompletionItemKind> = {
+  label: CompletionItemKind.Module,
+  dialogue: CompletionItemKind.Event,
+  set: CompletionItemKind.Variable,
+  defun: CompletionItemKind.Function,
+};
 
-    const kinds: Record<string, CompletionItemKind> = {
-      label: CompletionItemKind.Module,
-      dialogue: CompletionItemKind.Event,
-      set: CompletionItemKind.Variable,
-      defun: CompletionItemKind.Function,
-      operators: CompletionItemKind.Operator,
-    };
-
-    for (const [key, value] of Object.entries(keywordData)) {
-      completionItems.push({
-        label: key,
-        kind: kinds[key] || CompletionItemKind.Text,
-        detail: value,
-      });
-    }
-
-    return completionItems;
-  },
+connection.onCompletion((_pos: TextDocumentPositionParams): CompletionItem[] =>
+  Object.entries(Keywords).map(([key, info]) => ({
+    label: key,
+    kind: CompletionKinds[key] ?? CompletionItemKind.Keyword,
+    detail: info.description,
+  })),
 );
 
-// Resolves additional information for the item selected in
-// the completion list.
-connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
-  return item;
-});
+connection.onCompletionResolve((item: CompletionItem): CompletionItem => item);
 
 documents.listen(connection);
 connection.listen();
