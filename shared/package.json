@@ -1,0 +1,5 @@
+{
+  "name": "vnscript-shared",
+  "main": "out/keywords.js",
+  "types": "out/keywords.d.ts"
+}
