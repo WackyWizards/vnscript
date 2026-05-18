@@ -16,10 +16,10 @@ export function tryUpdateKeywords() {
     fs.writeFileSync(
       tmLanguagePath,
       JSON.stringify(tmLanguageData, null, 2),
-      'utf-8'
+      'utf-8',
     );
     console.info(
-      'Updated .tmLanguage.json with new keywords pattern. Please restart the client to apply the changes.'
+      'Updated .tmLanguage.json with new keywords pattern. Please restart the client to apply the changes.',
     );
   }
 }

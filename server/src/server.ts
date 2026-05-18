@@ -94,7 +94,7 @@ connection.onDidChangeConfiguration((change) => {
   if (hasConfigurationCapability) {
     documentSettings.clear();
   } else {
-    globalSettings = (change.settings.vnscript || defaultSettings);
+    globalSettings = change.settings.vnscript || defaultSettings;
   }
 
   documents.all().forEach(validateTextDocument);
@@ -111,7 +111,6 @@ function getDocumentSettings(resource: string): Thenable<Settings> {
       scopeUri: resource,
       section: 'vnscript',
     });
-
     documentSettings.set(resource, result);
   }
 

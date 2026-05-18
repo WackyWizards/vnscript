@@ -13,11 +13,11 @@ let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
   context.subscriptions.push(
-    languages.registerHoverProvider('vnscript', new HoverProvider())
+    languages.registerHoverProvider('vnscript', new HoverProvider()),
   );
 
   const serverModule = context.asAbsolutePath(
-    path.join('server', 'out', 'server.js')
+    path.join('server', 'out', 'server.js'),
   );
 
   const serverOptions: ServerOptions = {
@@ -39,7 +39,7 @@ export function activate(context: ExtensionContext) {
     'vnscript-client',
     'vnscript-client',
     serverOptions,
-    clientOptions
+    clientOptions,
   );
 
   client.start();

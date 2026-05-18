@@ -5,7 +5,7 @@ import { validateScript } from './validation';
 export function parseText(
   text: string,
   textDocument: TextDocument,
-  diagnostics: Diagnostic[]
+  diagnostics: Diagnostic[],
 ) {
   validateScript(text, textDocument, diagnostics);
 }
