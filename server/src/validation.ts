@@ -1,6 +1,10 @@
 import { Diagnostic, DiagnosticSeverity } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { tokenize } from './tokenizer';
+import { parse } from './parser';
+import { Node, ListNode, AtomNode } from './types';
 import { Keywords } from '../../shared/out/keywords';
+import { ArgumentReader } from './argumentReader';
 
 const Builtins = new Set(Object.keys(Keywords));
 
@@ -88,36 +92,13 @@ const Arity: Partial<Record<string, [number, number]>> = {
   '<=': [2, 2],
 };
 
-interface Token {
+export interface Token {
   value: string;
   start: number;
   end: number;
 }
 
-type Node = ListNode | AtomNode;
-
-interface ListNode {
-  type: 'list';
-  children: Node[];
-  start: number;
-  end: number;
-}
-
-interface AtomNode {
-  type: 'atom';
-  value: string;
-  kind: 'symbol' | 'string' | 'number';
-  start: number;
-  end: number;
-}
-
-interface Scope {
-  functions: Set<string>;
-  vars: Set<string>;
-  labels: Set<string>;
-}
-
-class TokenizeError extends Error {
+export class TokenizeError extends Error {
   constructor(
     message: string,
     public readonly offset: number,
@@ -126,38 +107,82 @@ class TokenizeError extends Error {
   }
 }
 
-function isWhitespaceOrComma(c: string): boolean {
-  return c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === ',';
+interface Scope {
+  functions: Set<string>;
+  vars: Set<string>;
+  labels: Set<string>;
 }
 
+interface ValidationContext {
+  scope: Scope;
+  diagnostics: Diagnostic[];
+  document: TextDocument;
+}
+
+function childContext(
+  ctx: ValidationContext,
+  scopeOverrides?: Partial<Scope>,
+): ValidationContext {
+  return {
+    ...ctx,
+    scope: { ...ctx.scope, ...scopeOverrides },
+  };
+}
+
+// Called from validateNode when the head symbol matches.
+type KeywordValidator = (node: ListNode, ctx: ValidationContext) => void;
+
+const KeywordValidators: Record<string, KeywordValidator> = {
+  label: validateLabel,
+  defun: validateDefun,
+  set: validateSet,
+  input: validateInput,
+  jump: validateJumpOrStart,
+  start: validateJumpOrStart,
+  dialogue: validateDialogue,
+  choice: validateChoice,
+  char: validateChar,
+  after: validateAfter,
+  sound: validateSound,
+  music: (node, ctx) => requireStringFirstArg(node, ctx, 'a music name string'),
+  bg: (node, ctx) => requireStringFirstArg(node, ctx, 'an image name string'),
+};
+
+// Called when a named sub-keyword is encountered inside a keyword's arg list.
+// `reader` is positioned just after the sub-keyword atom.
+// `kwNode` is the sub-keyword atom itself, used as a fallback error location.
+type SubkeywordHandler = (
+  reader: ArgumentReader,
+  kwNode: AtomNode,
+  ctx: ValidationContext,
+) => void;
+
 function addDiagnostic(
-  diagnostics: Diagnostic[],
-  document: TextDocument,
+  ctx: ValidationContext,
   start: number,
   end: number,
   message: string,
   severity = DiagnosticSeverity.Error,
-) {
-  diagnostics.push({
+): void {
+  ctx.diagnostics.push({
     severity,
-    range: { start: document.positionAt(start), end: document.positionAt(end) },
+    range: {
+      start: ctx.document.positionAt(start),
+      end: ctx.document.positionAt(end),
+    },
     message,
     source: 'vnscript',
   });
 }
 
-// Validate and register a variable name from set/input.
-// Returns 'local', 'global', or 'invalid'.
 function validateVarName(
   node: AtomNode,
-  diagnostics: Diagnostic[],
-  document: TextDocument,
+  ctx: ValidationContext,
 ): 'local' | 'global' | 'invalid' {
   if (node.value.startsWith('$')) {
     if (!GlobalVarPattern.test(node.value)) {
       addDiagnostic(
-        diagnostics,
-        document,
+        ctx,
         node.start,
         node.end,
         `Invalid global variable name '${node.value}'`,
@@ -169,8 +194,7 @@ function validateVarName(
 
   if (!NamePattern.test(node.value)) {
     addDiagnostic(
-      diagnostics,
-      document,
+      ctx,
       node.start,
       node.end,
       `Invalid variable name '${node.value}'`,
@@ -181,160 +205,566 @@ function validateVarName(
   return 'local';
 }
 
-function tokenize(text: string): Token[] {
-  const tokens: Token[] = [];
-  let i = 0;
-
-  while (i < text.length) {
-    const c = text[i];
-
-    // whitespace, commas are optional visual separators (e.g. in pos lists)
-    if (isWhitespaceOrComma(c)) {
-      i++;
-      continue;
-    }
-
-    // single-line comment
-    if (c === '/' && text[i + 1] === '/') {
-      while (i < text.length && text[i] !== '\n') {
-        i++;
-      }
-      continue;
-    }
-
-    // block comment, depth-tracked so nested /* ... */ works
-    if (c === '/' && text[i + 1] === '*') {
-      const commentStart = i;
-      i += 2;
-      let depth = 1;
-
-      while (i < text.length && depth > 0) {
-        if (text[i] === '/' && text[i + 1] === '*') {
-          depth++;
-          i += 2;
-        } else if (text[i] === '*' && text[i + 1] === '/') {
-          depth--;
-          i += 2;
-        } else {
-          i++;
-        }
-      }
-
-      if (depth > 0) {
-        throw new TokenizeError('Unterminated block comment', commentStart);
-      }
-      continue;
-    }
-
-    // parens
-    if (c === '(' || c === ')') {
-      tokens.push({ value: c, start: i, end: i + 1 });
-      i++;
-      continue;
-    }
-
-    // strings
-    if (c === '"') {
-      const stringStart = i;
-      let j = i + 1;
-
-      while (j < text.length) {
-        if (text[j] === '\\') {
-          j += 2;
-          continue;
-        }
-        if (text[j] === '"') {
-          break;
-        }
-        j++;
-      }
-
-      if (j >= text.length)
-        throw new TokenizeError('Expected closing quote marks for end of string value', stringStart);
-
-      j++;
-      tokens.push({ value: text.slice(i, j), start: i, end: j });
-      i = j;
-      continue;
-    }
-
-    // symbols / numbers, stop on whitespace, commas, and parens
-    let j = i;
-    while (
-      j < text.length &&
-      !isWhitespaceOrComma(text[j]) &&
-      text[j] !== '(' &&
-      text[j] !== ')'
-    ) {
-      j++;
-    }
-
-    tokens.push({ value: text.slice(i, j), start: i, end: j });
-    i = j;
+/** Reads the next arg from reader and validates it as a known label name. */
+function validateLabelRef(
+  reader: ArgumentReader,
+  kwNode: AtomNode,
+  ctx: ValidationContext,
+): void {
+  const target = reader.read();
+  if (!target) {
+    addDiagnostic(
+      ctx,
+      kwNode.start,
+      kwNode.end,
+      `'${kwNode.value}' requires a label name argument`,
+    );
+  } else if (target.type !== 'atom' || target.kind !== 'symbol') {
+    addDiagnostic(
+      ctx,
+      target.start,
+      target.end,
+      `'${kwNode.value}' target must be a label name, not a ${target.type === 'list' ? 'list' : target.kind}`,
+    );
+  } else if (!ctx.scope.labels.has(target.value)) {
+    addDiagnostic(
+      ctx,
+      target.start,
+      target.end,
+      `Unknown label '${target.value}'`,
+    );
   }
-
-  return tokens;
 }
 
-function parse(tokens: Token[]): Node[] {
-  let i = 0;
+/** Checks that the keyword's first positional argument (index 1) is a string. */
+function requireStringFirstArg(
+  node: ListNode,
+  ctx: ValidationContext,
+  description: string,
+): void {
+  const arg = node.children[1];
+  const keyword = (node.children[0] as AtomNode).value;
+  if (!arg || arg.type !== 'atom' || arg.kind !== 'string') {
+    addDiagnostic(
+      ctx,
+      node.start,
+      node.end,
+      `'${keyword}' requires ${description} as its first argument`,
+    );
+  }
+}
 
-  function parseExpr(): Node {
-    const token = tokens[i];
-    if (!token) {
-      throw new Error('Unexpected end of file');
-    }
+/** Reads the next arg from reader as a coordinate list and validates it. */
+function validateCoordList(
+  reader: ArgumentReader,
+  kwNode: AtomNode,
+  ctx: ValidationContext,
+  size: number,
+  hint: string,
+): void {
+  const listArg = reader.read();
+  const label = kwNode.value;
 
-    if (token.value === '(') {
-      const start = token.start;
-      i++;
-
-      const children: Node[] = [];
-      while (tokens[i] && tokens[i].value !== ')') {
-        children.push(parseExpr());
-      }
-
-      const endToken = tokens[i];
-      if (!endToken) {
-        throw new Error("Unclosed '(', missing ')'");
-      }
-      i++;
-
-      return { type: 'list', children, start, end: endToken.end };
-    }
-
-    if (token.value === ')') {
-      throw new Error("Unexpected ')', no matching '('");
-    }
-
-    i++;
-
-    let kind: AtomNode['kind'] = 'symbol';
-    if (token.value.startsWith('"')) {
-      kind = 'string';
-    } else if (/^-?\d+(\.\d+)?$/.test(token.value)) {
-      kind = 'number';
-    }
-
-    return {
-      type: 'atom',
-      value: token.value,
-      kind,
-      start: token.start,
-      end: token.end,
-    };
+  if (!listArg || listArg.type !== 'list') {
+    addDiagnostic(
+      ctx,
+      kwNode.start,
+      kwNode.end,
+      `'${label}' requires a coordinate list, e.g. ${label} ${hint}`,
+    );
+    return;
   }
 
-  const nodes: Node[] = [];
-  while (i < tokens.length) nodes.push(parseExpr());
-  return nodes;
+  if (listArg.children.length !== size) {
+    addDiagnostic(
+      ctx,
+      listArg.start,
+      listArg.end,
+      `'${label}' list must have exactly ${size} values ${hint}, got ${listArg.children.length}`,
+    );
+    return;
+  }
+
+  for (const coord of listArg.children) {
+    if (coord.type !== 'atom' || coord.kind !== 'number') {
+      addDiagnostic(
+        ctx,
+        coord.start,
+        coord.end,
+        `'${label}' values must be numbers`,
+      );
+    }
+  }
+}
+
+const AfterSubkeywords: Record<string, SubkeywordHandler> = {
+  end: () => {},
+  jump: (reader, kwNode, ctx) => validateLabelRef(reader, kwNode, ctx),
+  load: (reader, kwNode, ctx) => {
+    if (!reader.read()) {
+      addDiagnostic(
+        ctx,
+        kwNode.start,
+        kwNode.end,
+        "'load' requires a file path argument",
+      );
+    }
+  },
+};
+
+const ChoiceSubkeywords: Record<string, SubkeywordHandler> = {
+  jump: (reader, kwNode, ctx) => validateLabelRef(reader, kwNode, ctx),
+  cond: (reader, kwNode, ctx) => {
+    const condExpr = reader.read();
+    if (!condExpr) {
+      addDiagnostic(
+        ctx,
+        kwNode.start,
+        kwNode.end,
+        "'cond' requires an expression argument",
+      );
+    } else if (condExpr.type !== 'list') {
+      addDiagnostic(
+        ctx,
+        condExpr.start,
+        condExpr.end,
+        "'cond' requires an expression, e.g. (= x 1)",
+      );
+    } else {
+      validateNode(condExpr, ctx);
+    }
+  },
+};
+
+const DialogueSubkeywords: Record<string, SubkeywordHandler> = {
+  speaker: (reader, kwNode, ctx) => {
+    const arg = reader.read();
+    if (!arg) {
+      addDiagnostic(
+        ctx,
+        kwNode.start,
+        kwNode.end,
+        "'speaker' requires a character name argument",
+      );
+    } else if (arg.type !== 'atom' || arg.kind !== 'symbol') {
+      addDiagnostic(
+        ctx,
+        arg.start,
+        arg.end,
+        "'speaker' requires a character name, not a " +
+          (arg.type === 'list' ? 'list' : arg.kind),
+      );
+    }
+  },
+};
+
+const CharSubkeywords: Record<string, SubkeywordHandler> = {
+  exp: (reader) => {
+    reader.read();
+  }, // consume portrait filename
+  pos: (reader, kwNode, ctx) =>
+    validateCoordList(reader, kwNode, ctx, 2, '(x, y)'),
+  rot: (reader, kwNode, ctx) =>
+    validateCoordList(reader, kwNode, ctx, 3, '(x, y, z)'),
+};
+
+const SoundSubkeywords: Record<string, SubkeywordHandler> = {
+  mixer: (reader, kwNode, ctx) => {
+    const arg = reader.read();
+    if (!arg) {
+      addDiagnostic(
+        ctx,
+        kwNode.start,
+        kwNode.end,
+        "'mixer' requires a mixer name argument",
+      );
+    } else if (arg.type !== 'atom' || arg.kind !== 'string') {
+      addDiagnostic(
+        ctx,
+        arg.start,
+        arg.end,
+        "'mixer' requires a string mixer name",
+      );
+    }
+  },
+};
+
+function validateLabel(node: ListNode, ctx: ValidationContext): void {
+  const labelName = node.children[1];
+  if (!labelName || labelName.type !== 'atom' || labelName.kind !== 'symbol') {
+    addDiagnostic(
+      ctx,
+      node.start,
+      node.end,
+      "'label' requires a name as its first argument",
+    );
+    return;
+  }
+
+  // input and choice are mutually exclusive within a label
+  const body = node.children.slice(2);
+  const firstKeyword = (v: string) =>
+    body.some(
+      (c) =>
+        c.type === 'list' &&
+        c.children[0]?.type === 'atom' &&
+        c.children[0].value === v,
+    );
+
+  if (firstKeyword('choice') && firstKeyword('input')) {
+    addDiagnostic(
+      ctx,
+      node.start,
+      node.end,
+      "Cannot use 'input' in a label that also has 'choice'",
+    );
+  }
+
+  // label body runs in its own scope so local vars don't leak out
+  const labelCtx = childContext(ctx, { vars: new Set(ctx.scope.vars) });
+  for (const child of body) {
+    validateNode(child, labelCtx);
+  }
+}
+
+function validateDefun(node: ListNode, ctx: ValidationContext): void {
+  const name = node.children[1];
+  const params = node.children[2];
+
+  if (!name || name.type !== 'atom') {
+    addDiagnostic(
+      ctx,
+      node.start,
+      node.end,
+      "'defun' requires a function name as its first argument",
+    );
+    return;
+  }
+
+  if (!NamePattern.test(name.value)) {
+    addDiagnostic(
+      ctx,
+      name.start,
+      name.end,
+      `Invalid function name '${name.value}'`,
+    );
+    return;
+  }
+
+  const localCtx = childContext(ctx, { vars: new Set(ctx.scope.vars) });
+
+  if (params) {
+    if (params.type !== 'list') {
+      addDiagnostic(
+        ctx,
+        params.start,
+        params.end,
+        "'defun' parameter list must be wrapped in parentheses, e.g. (param1 param2)",
+      );
+    } else {
+      for (const param of params.children) {
+        if (param.type !== 'atom') {
+          continue;
+        }
+        if (!NamePattern.test(param.value)) {
+          addDiagnostic(
+            ctx,
+            param.start,
+            param.end,
+            `Invalid parameter name '${param.value}'`,
+          );
+          continue;
+        }
+        localCtx.scope.vars.add(param.value);
+      }
+    }
+  }
+
+  for (const child of node.children.slice(3)) {
+    validateNode(child, localCtx);
+  }
+}
+
+function validateSet(node: ListNode, ctx: ValidationContext): void {
+  const argCount = node.children.length - 1;
+  if (argCount % 2 !== 0) {
+    addDiagnostic(
+      ctx,
+      node.start,
+      node.end,
+      `'set' requires an even number of arguments (key-value pairs), got ${argCount}`,
+    );
+  }
+
+  for (let i = 1; i < node.children.length - 1; i += 2) {
+    const varName = node.children[i];
+    const value = node.children[i + 1];
+
+    if (varName.type !== 'atom' || varName.kind !== 'symbol') {
+      addDiagnostic(
+        ctx,
+        varName.start,
+        varName.end,
+        'Variable name must be a symbol',
+      );
+    } else {
+      const kind = validateVarName(varName, ctx);
+      if (kind === 'local') {
+        ctx.scope.vars.add(varName.value);
+      }
+    }
+
+    if (value) {
+      validateValue(value, ctx);
+    }
+  }
+}
+
+function validateInput(node: ListNode, ctx: ValidationContext): void {
+  const varName = node.children[1];
+  if (!varName) {
+    return;
+  }
+
+  if (varName.type !== 'atom' || varName.kind !== 'symbol') {
+    addDiagnostic(
+      ctx,
+      varName.start,
+      varName.end,
+      'Variable name must be a symbol',
+    );
+  } else {
+    const kind = validateVarName(varName, ctx);
+    if (kind === 'local') {
+      ctx.scope.vars.add(varName.value);
+    }
+  }
+}
+
+function validateJumpOrStart(node: ListNode, ctx: ValidationContext): void {
+  const name = (node.children[0] as AtomNode).value;
+  const target = node.children[1];
+  if (!target) {
+    return;
+  }
+
+  if (target.type !== 'atom' || target.kind !== 'symbol') {
+    addDiagnostic(
+      ctx,
+      target.start,
+      target.end,
+      `'${name}' target must be a label name, not a ${target.type === 'list' ? 'list' : target.kind}`,
+    );
+  } else if (!ctx.scope.labels.has(target.value)) {
+    addDiagnostic(
+      ctx,
+      target.start,
+      target.end,
+      `Unknown label '${target.value}'`,
+    );
+  }
+}
+
+function validateDialogue(node: ListNode, ctx: ValidationContext): void {
+  const reader = new ArgumentReader(node.children, 1);
+  const isDialogueKeyword = (n: Node) =>
+    n.type === 'atom' && n.kind === 'symbol' && n.value in DialogueSubkeywords;
+
+  // collect text parts before the first keyword
+  const textArgs: Node[] = [];
+  while (reader.hasMore && !isDialogueKeyword(reader.peek()!)) {
+    textArgs.push(reader.read()!);
+  }
+
+  if (textArgs.length === 0) {
+    addDiagnostic(
+      ctx,
+      node.start,
+      node.end,
+      "'dialogue' requires at least one text argument (string, variable, or expression)",
+    );
+    return;
+  }
+
+  for (const part of textArgs) {
+    if (part.type === 'list') {
+      validateNode(part, ctx);
+    } else if (part.kind === 'symbol') {
+      validateValue(part, ctx);
+    }
+  }
+
+  // process keyword/argument pairs
+  while (reader.hasMore) {
+    const kw = reader.read()!;
+    if (kw.type !== 'atom' || kw.kind !== 'symbol') {
+      addDiagnostic(
+        ctx,
+        kw.start,
+        kw.end,
+        "Expected a keyword (e.g. 'speaker')",
+      );
+      continue;
+    }
+    const handler = DialogueSubkeywords[kw.value];
+    if (!handler) {
+      addDiagnostic(
+        ctx,
+        kw.start,
+        kw.end,
+        `Unknown dialogue keyword '${kw.value}'`,
+      );
+      reader.read(); // skip the dangling argument
+      continue;
+    }
+    handler(reader, kw, ctx);
+  }
+}
+
+function validateChoice(node: ListNode, ctx: ValidationContext): void {
+  const text = node.children[1];
+  if (text?.type !== 'atom' || text.kind !== 'string') {
+    addDiagnostic(
+      ctx,
+      node.start,
+      node.end,
+      "'choice' requires a display string as its first argument",
+    );
+  }
+
+  const reader = new ArgumentReader(node.children, 2);
+  while (reader.hasMore) {
+    const arg = reader.peek()!;
+    if (arg.type !== 'atom' || arg.kind !== 'symbol') {
+      reader.read();
+      continue;
+    }
+    reader.read();
+
+    const handler = ChoiceSubkeywords[arg.value];
+    if (!handler) {
+      addDiagnostic(
+        ctx,
+        arg.start,
+        arg.end,
+        `Unknown choice keyword '${arg.value}', expected: ${Object.keys(ChoiceSubkeywords).join(', ')}`,
+      );
+      continue;
+    }
+    handler(reader, arg, ctx);
+  }
+}
+
+function validateChar(node: ListNode, ctx: ValidationContext): void {
+  const charName = node.children[1];
+  if (!charName || charName.type !== 'atom' || charName.kind !== 'symbol') {
+    addDiagnostic(
+      ctx,
+      node.start,
+      node.end,
+      "'char' requires a character name as its first argument",
+    );
+    return;
+  }
+
+  const reader = new ArgumentReader(node.children, 2);
+  while (reader.hasMore) {
+    const arg = reader.peek()!;
+    if (arg.type !== 'atom' || arg.kind !== 'symbol') {
+      reader.read();
+      continue;
+    }
+    reader.read();
+
+    const handler = CharSubkeywords[arg.value];
+    if (!handler) {
+      addDiagnostic(
+        ctx,
+        arg.start,
+        arg.end,
+        `Unknown char keyword '${arg.value}', expected: ${Object.keys(CharSubkeywords).join(', ')}`,
+      );
+      continue;
+    }
+
+    handler(reader, arg, ctx);
+  }
+}
+
+function validateSound(node: ListNode, ctx: ValidationContext): void {
+  requireStringFirstArg(node, ctx, 'a sound name string');
+
+  const reader = new ArgumentReader(node.children, 2);
+  while (reader.hasMore) {
+    const arg = reader.peek()!;
+    if (arg.type !== 'atom' || arg.kind !== 'symbol') {
+      reader.read();
+      continue;
+    }
+
+    reader.read();
+
+    const handler = SoundSubkeywords[arg.value];
+    if (!handler) {
+      addDiagnostic(
+        ctx,
+        arg.start,
+        arg.end,
+        `Unknown sound keyword '${arg.value}', expected: ${Object.keys(SoundSubkeywords).join(', ')}`,
+      );
+      continue;
+    }
+
+    handler(reader, arg, ctx);
+  }
+}
+
+function validateAfter(node: ListNode, ctx: ValidationContext): void {
+  const reader = new ArgumentReader(node.children, 1);
+  while (reader.hasMore) {
+    const arg = reader.peek()!;
+
+    // list args are inline code blocks; recurse into them
+    if (arg.type === 'list') {
+      reader.read();
+      validateNode(arg, ctx);
+      continue;
+    }
+
+    if (arg.type !== 'atom' || arg.kind !== 'symbol') {
+      reader.read();
+      continue;
+    }
+    reader.read();
+
+    const handler = AfterSubkeywords[arg.value];
+    if (!handler) {
+      addDiagnostic(
+        ctx,
+        arg.start,
+        arg.end,
+        `Unknown after keyword '${arg.value}', expected: ${Object.keys(AfterSubkeywords).join(', ')}`,
+      );
+      continue;
+    }
+
+    handler(reader, arg, ctx);
+  }
 }
 
 export function validateScript(
   text: string,
   document: TextDocument,
   diagnostics: Diagnostic[],
-) {
+): void {
+  const scope: Scope = {
+    functions: new Set(),
+    vars: new Set(),
+    labels: new Set(),
+  };
+
+  const ctx: ValidationContext = { scope, diagnostics, document };
+
   let ast: Node[];
 
   try {
@@ -342,23 +772,18 @@ export function validateScript(
     ast = parse(tokens);
   } catch (err) {
     const offset = err instanceof TokenizeError ? err.offset : 0;
+
     addDiagnostic(
-      diagnostics,
-      document,
+      ctx,
       offset,
       offset + 1,
       err instanceof Error ? err.message : String(err),
     );
+
     return;
   }
 
-  const scope: Scope = {
-    functions: new Set(),
-    vars: new Set(),
-    labels: new Set(),
-  };
-
-  // first pass, collect labels and functions for forward references
+  // pass 1: collect labels + functions
   for (const node of ast) {
     if (node.type !== 'list') {
       continue;
@@ -372,15 +797,6 @@ export function validateScript(
     if (head.value === 'label') {
       const name = node.children[1];
       if (name?.type === 'atom') {
-        if (scope.labels.has(name.value)) {
-          addDiagnostic(
-            diagnostics,
-            document,
-            name.start,
-            name.end,
-            `Duplicate label '${name.value}'`,
-          );
-        }
         scope.labels.add(name.value);
       }
     }
@@ -388,52 +804,31 @@ export function validateScript(
     if (head.value === 'defun') {
       const name = node.children[1];
       if (name?.type === 'atom') {
-        if (scope.functions.has(name.value)) {
-          addDiagnostic(
-            diagnostics,
-            document,
-            name.start,
-            name.end,
-            `Duplicate function '${name.value}'`,
-          );
-        }
         scope.functions.add(name.value);
       }
     }
   }
 
+  // pass 2: validation
   for (const node of ast) {
-    validateNode(node, scope, diagnostics, document);
+    validateNode(node, ctx);
   }
 }
 
-function validateNode(
-  node: Node,
-  scope: Scope,
-  diagnostics: Diagnostic[],
-  document: TextDocument,
-) {
+function validateNode(node: Node, ctx: ValidationContext): void {
   if (node.type !== 'list') {
     return;
   }
 
   if (node.children.length === 0) {
-    addDiagnostic(
-      diagnostics,
-      document,
-      node.start,
-      node.end,
-      'Empty expression',
-    );
+    addDiagnostic(ctx, node.start, node.end, 'Empty expression');
     return;
   }
 
   const head = node.children[0];
-
   if (head.type !== 'atom') {
     addDiagnostic(
-      diagnostics,
-      document,
+      ctx,
       head.start,
       head.end,
       'Expression head must be a symbol',
@@ -445,8 +840,7 @@ function validateNode(
 
   if (NonCallable.has(name)) {
     addDiagnostic(
-      diagnostics,
-      document,
+      ctx,
       head.start,
       head.end,
       `'${name}' is a constant and cannot be used as a keyword`,
@@ -455,27 +849,20 @@ function validateNode(
   }
 
   const knownCallable =
-    Builtins.has(name) || Operators.has(name) || scope.functions.has(name);
+    Builtins.has(name) || Operators.has(name) || ctx.scope.functions.has(name);
+
   if (!knownCallable) {
-    addDiagnostic(
-      diagnostics,
-      document,
-      head.start,
-      head.end,
-      `Unknown keyword '${name}'`,
-    );
+    addDiagnostic(ctx, head.start, head.end, `Unknown keyword '${name}'`);
   }
 
   // arity check
   const arity = Arity[name];
   const argCount = node.children.length - 1;
-
   if (arity) {
     const [min, max] = arity;
     if (argCount < min) {
       addDiagnostic(
-        diagnostics,
-        document,
+        ctx,
         node.start,
         node.end,
         `'${name}' requires at least ${min} argument${min === 1 ? '' : 's'}, got ${argCount}`,
@@ -483,8 +870,7 @@ function validateNode(
     } else if (argCount > max) {
       const firstExcess = node.children[max + 1];
       addDiagnostic(
-        diagnostics,
-        document,
+        ctx,
         firstExcess.start,
         node.end,
         `'${name}' accepts at most ${max} argument${max === 1 ? '' : 's'}, got ${argCount}`,
@@ -492,415 +878,32 @@ function validateNode(
     }
   }
 
-  // label, runs in its own scope so vars don't leak
-  if (name === 'label') {
-    const labelName = node.children[1];
-    if (
-      !labelName ||
-      labelName.type !== 'atom' ||
-      labelName.kind !== 'symbol'
-    ) {
-      addDiagnostic(
-        diagnostics,
-        document,
-        node.start,
-        node.end,
-        "'label' requires a name as its first argument",
-      );
-      return;
-    }
-
-    const labelScope: Scope = {
-      functions: scope.functions,
-      labels: scope.labels,
-      vars: new Set(scope.vars),
-    };
-    for (const child of node.children.slice(2)) {
-      validateNode(child, labelScope, diagnostics, document);
-    }
+  // dispatch to keyword-specific validator
+  const handler = KeywordValidators[name];
+  if (handler) {
+    handler(node, ctx);
     return;
   }
 
-  if (name === 'defun') {
-    validateDefun(node, scope, diagnostics, document);
-    return;
-  }
-
-  // set, loop over key-value pairs, validate each assigned value
-  if (name === 'set') {
-    for (let i = 1; i < node.children.length - 1; i += 2) {
-      const varName = node.children[i];
-      const value = node.children[i + 1];
-
-      if (varName.type !== 'atom' || varName.kind !== 'symbol') {
-        addDiagnostic(
-          diagnostics,
-          document,
-          varName.start,
-          varName.end,
-          'Variable name must be a symbol',
-        );
-      } else {
-        const kind = validateVarName(varName, diagnostics, document);
-        if (kind === 'local') {
-          scope.vars.add(varName.value);
-        }
-      }
-
-      if (value) {
-        validateValue(value, scope, diagnostics, document);
-      }
-    }
-    return;
-  }
-
-  // input, registers the target variable, no value arg
-  if (name === 'input') {
-    const varName = node.children[1];
-    if (varName) {
-      if (varName.type !== 'atom' || varName.kind !== 'symbol') {
-        addDiagnostic(
-          diagnostics,
-          document,
-          varName.start,
-          varName.end,
-          'Variable name must be a symbol',
-        );
-      } else {
-        const kind = validateVarName(varName, diagnostics, document);
-        if (kind === 'local') scope.vars.add(varName.value);
-      }
-    }
-    return;
-  }
-
-  // jump / start, validate the label target
-  if (name === 'jump' || name === 'start') {
-    const target = node.children[1];
-    if (target?.type === 'atom' && !scope.labels.has(target.value)) {
-      addDiagnostic(
-        diagnostics,
-        document,
-        target.start,
-        target.end,
-        `Unknown label '${target.value}'`,
-      );
-    }
-    return;
-  }
-
-  // dialogue, multi-part text (strings, variable refs, expressions),
-  // followed by optional 'speaker' keyword pairs
-  if (name === 'dialogue') {
-    const args = node.children.slice(1);
-    const firstKeywordIdx = args.findIndex(
-      (a) => a.type === 'atom' && a.kind === 'symbol' && a.value === 'speaker',
-    );
-    const textArgs =
-      firstKeywordIdx === -1 ? args : args.slice(0, firstKeywordIdx);
-
-    if (textArgs.length === 0) {
-      addDiagnostic(
-        diagnostics,
-        document,
-        node.start,
-        node.end,
-        "'dialogue' requires at least one text argument (string, variable, or expression)",
-      );
-      return;
-    }
-
-    for (const part of textArgs) {
-      if (part.type === 'list') {
-        validateNode(part, scope, diagnostics, document);
-      } else if (part.kind === 'symbol') {
-        validateValue(part, scope, diagnostics, document);
-      }
-    }
-
-    const keywordArgs =
-      firstKeywordIdx === -1 ? [] : args.slice(firstKeywordIdx);
-    for (let i = 0; i < keywordArgs.length; i++) {
-      const kw = keywordArgs[i];
-      if (kw.type !== 'atom' || kw.kind !== 'symbol') {
-        addDiagnostic(
-          diagnostics,
-          document,
-          kw.start,
-          kw.end,
-          "Expected a keyword (e.g. 'speaker')",
-        );
-        continue;
-      }
-      if (kw.value !== 'speaker') {
-        addDiagnostic(
-          diagnostics,
-          document,
-          kw.start,
-          kw.end,
-          `Unknown dialogue keyword '${kw.value}'`,
-        );
-      }
-      i++; // skip the keyword's argument
-    }
-    return;
-  }
-
-  // choice, string label, then optional jump/cond sub-keyword pairs
-  if (name === 'choice') {
-    const text = node.children[1];
-    if (text?.type !== 'atom' || text.kind !== 'string') {
-      addDiagnostic(
-        diagnostics,
-        document,
-        node.start,
-        node.end,
-        "'choice' requires a display string as its first argument",
-      );
-    }
-
-    for (let i = 2; i < node.children.length; i++) {
-      const arg = node.children[i];
-      if (arg.type !== 'atom' || arg.kind !== 'symbol') {
-        continue;
-      }
-
-      if (arg.value !== 'jump' && arg.value !== 'cond') {
-        addDiagnostic(
-          diagnostics,
-          document,
-          arg.start,
-          arg.end,
-          `Unknown choice keyword '${arg.value}', expected: jump, cond`,
-        );
-        continue;
-      }
-
-      if (arg.value === 'jump') {
-        const target = node.children[++i];
-        if (target?.type === 'atom' && !scope.labels.has(target.value)) {
-          addDiagnostic(
-            diagnostics,
-            document,
-            target.start,
-            target.end,
-            `Unknown label '${target.value}'`,
-          );
-        }
-      } else {
-        i++; // skip the cond expression
-      }
-    }
-    return;
-  }
-
-  // char, character name, then exp/pos/rot sub-keyword pairs.
-  // pos/rot take a list; exp takes an atom. All are inline siblings, not nested nodes.
-  // e.g. (char Rien exp standing.png pos (10, 5) rot (0, 180, 0))
-  if (name === 'char') {
-    for (let i = 2; i < node.children.length; i++) {
-      const arg = node.children[i];
-      if (arg.type !== 'atom' || arg.kind !== 'symbol') {
-        continue;
-      }
-
-      if (arg.value !== 'exp' && arg.value !== 'pos' && arg.value !== 'rot') {
-        addDiagnostic(
-          diagnostics,
-          document,
-          arg.start,
-          arg.end,
-          `Unknown char keyword '${arg.value}', expected: exp, pos, rot`,
-        );
-        continue;
-      }
-
-      if (arg.value === 'exp') {
-        i++; // skip the portrait filename atom
-        continue;
-      }
-
-      const listArg = node.children[++i];
-      const [label, size, hint] =
-        arg.value === 'pos' ? ['pos', 2, '(x, y)'] : ['rot', 3, '(x, y, z)'];
-
-      if (!listArg || listArg.type !== 'list') {
-        addDiagnostic(
-          diagnostics,
-          document,
-          arg.start,
-          arg.end,
-          `'${label}' requires a coordinate list, e.g. ${label} ${hint}`,
-        );
-        continue;
-      }
-
-      if (listArg.children.length !== size) {
-        addDiagnostic(
-          diagnostics,
-          document,
-          listArg.start,
-          listArg.end,
-          `'${label}' list must have exactly ${size} values ${hint}, got ${listArg.children.length}`,
-        );
-        continue;
-      }
-
-      for (const coord of listArg.children) {
-        if (coord.type !== 'atom' || coord.kind !== 'number')
-          addDiagnostic(
-            diagnostics,
-            document,
-            coord.start,
-            coord.end,
-            `'${label}' values must be numbers`,
-          );
-      }
-    }
-    return;
-  }
-
-  // after, code blocks, then jump/end/load sub-keyword pairs
-  if (name === 'after') {
-    for (let i = 1; i < node.children.length; i++) {
-      const arg = node.children[i];
-
-      if (arg.type === 'list') {
-        validateNode(arg, scope, diagnostics, document);
-        continue;
-      }
-
-      if (arg.type !== 'atom' || arg.kind !== 'symbol') {
-        continue;
-      }
-
-      if (arg.value !== 'jump' && arg.value !== 'end' && arg.value !== 'load') {
-        addDiagnostic(
-          diagnostics,
-          document,
-          arg.start,
-          arg.end,
-          `Unknown after keyword '${arg.value}', expected: jump, end, load`,
-        );
-        continue;
-      }
-
-      if (arg.value === 'jump') {
-        const target = node.children[++i];
-        if (target?.type === 'atom' && !scope.labels.has(target.value)) {
-          addDiagnostic(
-            diagnostics,
-            document,
-            target.start,
-            target.end,
-            `Unknown label '${target.value}'`,
-          );
-        }
-      } else if (arg.value === 'load') {
-        i++; // skip the path
-      }
-    }
-    return;
-  }
-
-  // expression keywords and user-defined functions, every arg is a value
-  if (ExpressionKeywords.has(name) || scope.functions.has(name)) {
+  // expression keywords and user-defined functions: every arg is a value
+  if (ExpressionKeywords.has(name) || ctx.scope.functions.has(name)) {
     for (const child of node.children.slice(1)) {
-      validateValue(child, scope, diagnostics, document);
+      validateValue(child, ctx);
     }
     return;
   }
 
-  // everything else (sound, music, bg, load, etc.), atoms are names/paths,
-  // only recurse into list children for nested expressions
+  // everything else: atoms are names/paths; only recurse into list children
   for (const child of node.children.slice(1)) {
     if (child.type === 'list') {
-      validateNode(child, scope, diagnostics, document);
+      validateNode(child, ctx);
     }
   }
 }
 
-function validateDefun(
-  node: ListNode,
-  scope: Scope,
-  diagnostics: Diagnostic[],
-  document: TextDocument,
-) {
-  const name = node.children[1];
-  const params = node.children[2];
-
-  if (!name || name.type !== 'atom') {
-    addDiagnostic(
-      diagnostics,
-      document,
-      node.start,
-      node.end,
-      "'defun' requires a function name as its first argument",
-    );
-    return;
-  }
-
-  if (!NamePattern.test(name.value)) {
-    addDiagnostic(
-      diagnostics,
-      document,
-      name.start,
-      name.end,
-      `Invalid function name '${name.value}'`,
-    );
-    return;
-  }
-
-  const localScope: Scope = {
-    functions: scope.functions,
-    labels: scope.labels,
-    vars: new Set(scope.vars),
-  };
-
-  if (params) {
-    if (params.type !== 'list') {
-      addDiagnostic(
-        diagnostics,
-        document,
-        params.start,
-        params.end,
-        "'defun' parameter list must be wrapped in parentheses, e.g. (param1 param2)",
-      );
-    } else {
-      for (const param of params.children) {
-        if (param.type !== 'atom') {
-          continue;
-        }
-
-        if (!NamePattern.test(param.value)) {
-          addDiagnostic(
-            diagnostics,
-            document,
-            param.start,
-            param.end,
-            `Invalid parameter name '${param.value}'`,
-          );
-          continue;
-        }
-
-        localScope.vars.add(param.value);
-      }
-    }
-  }
-
-  for (const child of node.children.slice(3)) {
-    validateNode(child, localScope, diagnostics, document);
-  }
-}
-
-function validateValue(
-  node: Node,
-  scope: Scope,
-  diagnostics: Diagnostic[],
-  document: TextDocument,
-) {
+function validateValue(node: Node, ctx: ValidationContext): void {
   if (node.type === 'list') {
-    validateNode(node, scope, diagnostics, document);
+    validateNode(node, ctx);
     return;
   }
 
@@ -917,8 +920,7 @@ function validateValue(
   if (value.startsWith('$')) {
     if (!GlobalVarPattern.test(value)) {
       addDiagnostic(
-        diagnostics,
-        document,
+        ctx,
         node.start,
         node.end,
         `Invalid global variable name '${value}'`,
@@ -927,13 +929,7 @@ function validateValue(
     return;
   }
 
-  if (!scope.vars.has(value) && !scope.functions.has(value)) {
-    addDiagnostic(
-      diagnostics,
-      document,
-      node.start,
-      node.end,
-      `Unknown variable '${value}'`,
-    );
+  if (!ctx.scope.vars.has(value) && !ctx.scope.functions.has(value)) {
+    addDiagnostic(ctx, node.start, node.end, `Unknown variable '${value}'`);
   }
 }

@@ -14,7 +14,7 @@ import {
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { Settings } from './settings';
-import { parseText } from './parsing';
+import { validateScript } from './validation';
 import { tryUpdateKeywords } from './keywords';
 import { Keywords } from '../../shared/out/keywords';
 
@@ -107,7 +107,22 @@ documents.onDidChangeContent((change) => validateTextDocument(change.document));
 
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const diagnostics: Diagnostic[] = [];
-  parseText(textDocument.getText(), textDocument, diagnostics);
+
+  try {
+    const text = textDocument.getText();
+    validateScript(text, textDocument, diagnostics);
+  } catch (err) {
+    diagnostics.push({
+      severity: 1,
+      range: {
+        start: textDocument.positionAt(0),
+        end: textDocument.positionAt(1),
+      },
+      message: err instanceof Error ? err.message : String(err),
+      source: 'vnscript',
+    });
+  }
+
   connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
 }
 
