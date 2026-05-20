@@ -163,4 +163,16 @@ export const Keywords: Record<string, KeywordInfo> = {
     description: 'Inverts a boolean value.',
     category: 'logic',
   },
+  xor: {
+    description: 'Returns true if exactly one condition is truthy.',
+    category: 'logic',
+  },
+  nand: {
+    description: 'Returns true if not all conditions are truthy.',
+    category: 'logic',
+  },
+  nor: {
+    description: 'Returns true if no conditions are truthy.',
+    category: 'logic',
+  }
 };
