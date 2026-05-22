@@ -20,7 +20,7 @@ export const Keywords: Record<string, KeywordInfo> = {
     category: 'ui',
     minArgs: 1,
     maxArgs: Infinity,
-    subkeywords: ['speaker'],
+    subkeywords: ['speaker', 'voiceline'],
   },
   choice: {
     description:
@@ -195,5 +195,9 @@ export const Keywords: Record<string, KeywordInfo> = {
     minArgs: 2,
     maxArgs: Infinity,
     expressionArgs: true,
+  },
+  voiceline: {
+    description: 'Mark a voiceline sound event for the dialogue line.',
+    category: 'audio',
   },
 };
