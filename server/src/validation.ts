@@ -356,6 +356,25 @@ const DialogueSubkeywords: Record<string, SubkeywordHandler> = {
       );
     }
   },
+  voiceline: (reader, kwNode, ctx) => {
+    const arg = reader.read();
+
+    if (!arg) {
+      addDiagnostic(
+        ctx,
+        kwNode.start,
+        kwNode.end,
+        "'voiceline' requires a sound event string",
+      );
+    } else if (arg.type !== 'atom' || arg.kind !== 'string') {
+      addDiagnostic(
+        ctx,
+        arg.start,
+        arg.end,
+        "'voiceline' requires a sound event name",
+      );
+    }
+  },
 };
 
 const CharSubkeywords: Record<string, SubkeywordHandler> = {
