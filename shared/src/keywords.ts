@@ -174,5 +174,26 @@ export const Keywords: Record<string, KeywordInfo> = {
   nor: {
     description: 'Returns true if no conditions are truthy.',
     category: 'logic',
-  }
+  },
+  mod: {
+    description: 'Returns the remainder of the division of two numbers.',
+    category: 'math',
+    minArgs: 2,
+    maxArgs: 2,
+    expressionArgs: true,
+  },
+  min: {
+    description: 'Returns the smallest of the provided numbers.',
+    category: 'math',
+    minArgs: 2,
+    maxArgs: Infinity,
+    expressionArgs: true,
+  },
+  max: {
+    description: 'Returns the largest of the provided numbers.',
+    category: 'math',
+    minArgs: 2,
+    maxArgs: Infinity,
+    expressionArgs: true,
+  },
 };
